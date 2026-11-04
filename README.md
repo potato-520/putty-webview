@@ -1,10 +1,10 @@
 # PuTTY WebView
 
-PuTTY WebView 是基于 PuTTY 0.84 的 Windows 终端客户端，使用 WebView2 和 xterm.js 提供多会话界面。本项目为非官方衍生项目，与 PuTTY 官方项目无隶属关系。
+PuTTY WebView 是基于 PuTTY 0.85 的 Windows 终端客户端，使用 WebView2 和 xterm.js 提供多会话界面。本项目为非官方衍生项目，与 PuTTY 官方项目无隶属关系。
 
 ## 安全提示
 
-本版本以 PuTTY 0.84 为基础。官方已公布 0.84 存在安全漏洞，部分问题在 0.85 中修复；本项目尚未完成这些上游修复的审计或移植。请参阅 [PuTTY 0.84 官方发布说明](https://www.chiark.greenend.org.uk/~sgtatham/putty/releases/0.84.html)，评估使用风险。
+本版本合并了 PuTTY 0.85 的上游更新，包括官方公布的安全修复。衍生项目的改动仍需独立验证；请参阅 [PuTTY 0.85 官方发布说明](https://www.chiark.greenend.org.uk/~sgtatham/putty/releases/0.85.html)。
 
 ## 功能
 
@@ -31,4 +31,4 @@ MSI 打包需要 WiX 3.14，路径和签名要求见[安装说明](docs/WEBVIEW-
 
 ## 源码与许可
 
-本项目基于 [PuTTY 0.84 官方源码](https://git.tartarus.org/simon/putty.git)，保留官方历史与 `0.84` 标签，在其后以一个提交导入 PuTTY WebView 1.0.0。原项目说明见 [README](README)，许可条款见 [LICENCE](LICENCE)。本仓库包含第三方资源，请同时遵守各组件自带的许可条款。
+本项目基于 [PuTTY 官方源码](https://git.tartarus.org/simon/putty.git)，保留官方历史与 `0.84` 标签；PuTTY WebView 1.0.0 导入之后合并了上游 0.85。原项目说明见 [README](README)，许可条款见 [LICENCE](LICENCE)。本仓库包含第三方资源，请同时遵守各组件自带的许可条款。
