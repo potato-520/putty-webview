@@ -206,3 +206,56 @@ target_link_libraries(test_terminal
   guiterminal settings eventloop utils ${platform_libraries})
 
 add_sources_from_current_dir(test_conf no-jump-list.c handle-wait.c)
+
+enable_language(CXX)
+string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+
+add_executable(putty_webview
+  putty_webview.c
+  conpty.c
+  webview/webview_host.cpp
+  help.c
+  ${CMAKE_SOURCE_DIR}/psftp.c
+  sftp_worker_glue.c
+  putty_webview.rc)
+be_list(putty_webview PuTTY_WebView SSH SERIAL OTHERBACKENDS CONPTY)
+add_dependencies(putty_webview generated_licence_h)
+
+target_compile_definitions(putty_webview PRIVATE PUTTY_WEBVIEW_EMBEDDED_SFTP)
+
+target_include_directories(putty_webview PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/webview/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/webview
+)
+
+if(MSVC)
+  target_compile_options(putty_webview PRIVATE "/utf-8")
+endif()
+
+target_link_libraries(putty_webview
+  ${CMAKE_CURRENT_SOURCE_DIR}/webview/lib/x64/WebView2LoaderStatic.lib
+  sftpclient
+  version
+  crypt32
+  dwmapi
+  guiterminal guimisc eventloop sshclient otherbackends settings network crypto
+  utils
+  ${platform_libraries})
+set_target_properties(putty_webview PROPERTIES WIN32_EXECUTABLE ON)
+installed_program(putty_webview)
+
+add_custom_target(putty_webview_assets
+  COMMAND ${CMAKE_COMMAND}
+    "-DASSET_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/webview/web"
+    "-DASSET_DESTINATION=$<TARGET_FILE_DIR:putty_webview>/webview/web"
+    "-DBUILD_ROOT=${CMAKE_BINARY_DIR}"
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/webview/sync_assets.cmake
+  COMMENT "Refreshing external WebView assets"
+  VERBATIM
+)
+add_dependencies(putty_webview putty_webview_assets)
+
+add_custom_target(putty_webkit DEPENDS putty_webview)

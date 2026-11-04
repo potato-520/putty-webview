@@ -13,6 +13,8 @@ cmake_install.cmake
 /shipped.txt
 *.dir/
 *.lib
+!windows/webkit/lib/
+!windows/webkit/lib/**
 .dirstamp
 .deps
 .DS_Store
@@ -70,6 +72,9 @@ cmake_install.cmake
 /.bmake
 /build.log
 /build.out
+/build-vs/
+/.tools/
+/dist/
 /empty.h
 Makefile
 !/contrib/cygtermd/Makefile

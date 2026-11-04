@@ -91,6 +91,10 @@ const struct BackendVtable *const backends[] = {
 #if SSH
     &sshconn_backend,
 #endif
+#if CONPTY
+    &powershell_backend,
+    &conpty_backend,
+#endif
 
     /*
      * Done. Null pointer to mark the end of the list.

@@ -207,6 +207,12 @@ static void config_host_handler(dlgcontrol *ctrl, dlgparam *dlg,
              */
             dlg_label_change(ctrl, dlg, "Serial line");
             dlg_editbox_set(ctrl, dlg, conf_get_str(conf, CONF_serline));
+        } else if (conf_get_int(conf, CONF_protocol) == PROT_CONPTY) {
+            dlg_label_change(ctrl, dlg, "WSL Distro (blank for default)");
+            dlg_editbox_set(ctrl, dlg, conf_get_str(conf, CONF_host));
+        } else if (conf_get_int(conf, CONF_protocol) == PROT_POWERSHELL) {
+            dlg_label_change(ctrl, dlg, "Parameters / Args (blank for default)");
+            dlg_editbox_set(ctrl, dlg, conf_get_str(conf, CONF_host));
         } else {
             dlg_label_change(ctrl, dlg, HOST_BOX_TITLE);
             dlg_editbox_set(ctrl, dlg, conf_get_str(conf, CONF_host));
@@ -240,6 +246,10 @@ static void config_port_handler(dlgcontrol *ctrl, dlgparam *dlg,
              */
             dlg_label_change(ctrl, dlg, "Speed");
             sprintf(buf, "%d", conf_get_int(conf, CONF_serspeed));
+        } else if (conf_get_int(conf, CONF_protocol) == PROT_CONPTY ||
+                   conf_get_int(conf, CONF_protocol) == PROT_POWERSHELL) {
+            dlg_label_change(ctrl, dlg, "(Port N/A)");
+            buf[0] = '\0';
         } else {
             dlg_label_change(ctrl, dlg, PORT_BOX_TITLE);
             if (conf_get_int(conf, CONF_port) != 0)
@@ -1993,6 +2003,9 @@ void setup_config_box(struct controlbox *b, bool midsession,
     ctrl_text(s, "(Log file name can contain &Y, &M, &D for date,"
               " &T for time, &H for host name, and &P for port number)",
               HELPCTX(logging_filename));
+    ctrl_editbox(s, "Auto-log directory (empty to disable):", 'y',
+                 100, HELPCTX(logging_filename),
+                 conf_editbox_handler, I(CONF_auto_log_dir), ED_STR);
     ctrl_radiobuttons(s, "What to do if the log file already exists:", 'e', 1,
                       HELPCTX(logging_exists),
                       conf_radiobutton_handler, I(CONF_logxfovr),
@@ -2059,6 +2072,9 @@ void setup_config_box(struct controlbox *b, bool midsession,
                       "Auto", I(AUTO),
                       "Force on", I(FORCE_ON),
                       "Force off", I(FORCE_OFF));
+    ctrl_editbox(s, "Max send rate (bytes/s, 0=unlimited):",
+                 NO_SHORTCUT, 20, HELPCTX(no_help),
+                 conf_editbox_handler, I(CONF_send_rate_limit), ED_INT);
 
     s = ctrl_getset(b, "Terminal", "printing", "Remote-controlled printing");
     ctrl_combobox(s, "Printer to send ANSI printer output to:", 'p', 100,

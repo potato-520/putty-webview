@@ -658,6 +658,11 @@ CONF_OPTION(localedit,
     SAVE_KEYWORD("LocalEdit"),
     STORAGE_ENUM(on_off_auto),
 )
+CONF_OPTION(send_rate_limit,
+    VALUE_TYPE(INT),
+    DEFAULT_INT(0),
+    SAVE_KEYWORD("SendRateLimit"),
+)
 CONF_OPTION(alwaysontop,
     VALUE_TYPE(BOOL),
     DEFAULT_BOOL(false),
@@ -840,6 +845,11 @@ CONF_OPTION(font_quality,
 CONF_OPTION(logfilename,
     VALUE_TYPE(FILENAME),
     SAVE_KEYWORD("LogFileName"),
+)
+CONF_OPTION(auto_log_dir,
+    VALUE_TYPE(STR),
+    DEFAULT_STR(""),
+    SAVE_KEYWORD("AutoLogDir"),
 )
 CONF_OPTION(logtype,
     VALUE_TYPE(INT),

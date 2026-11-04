@@ -1,0 +1,16 @@
+#include "rcstuff.h"
+#include "putty-rc.h"
+
+#define APPNAME "PuTTY-WebView"
+#define APPDESC "Modern Web-based PuTTY / ConPTY Terminal"
+
+IDI_MAINICON ICON "putty.ico"
+IDI_CFGICON ICON "puttycfg.ico"
+
+#include "help.rc2"
+#include "putty-common.rc2"
+
+#ifndef NO_MANIFESTS
+1 RT_MANIFEST "putty.mft"
+#endif /* NO_MANIFESTS */
+

@@ -1,0 +1,3365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PuTTY Remote File Editor</title>
+  <link rel="stylesheet" data-name="vs/editor/editor.main" href="vs/editor/editor.main.css">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <style>
+    :root {
+      --bg-main: #1e1e1e;
+      --bg-sidebar: #252526;
+      --bg-header: #323233;
+      --bg-tab-bar: #252526;
+      --bg-tab: #2d2d2d;
+      --bg-tab-active: #1e1e1e;
+      --bg-tab-hover: #2a2d2e;
+      --border-color: #3e3e42;
+      --text-main: #cccccc;
+      --text-muted: #858585;
+      --text-active: #ffffff;
+      --accent: #007acc;
+      --accent-hover: #1f8ad2;
+      --dirty-dot: #e5c07b;
+      --status-bg: #007acc;
+      --status-fg: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      color: var(--text-main);
+      background-color: var(--bg-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* Top App Bar */
+    #top-bar {
+      height: 38px;
+      background-color: var(--bg-header);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+
+    .top-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .app-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .session-badge {
+      background: rgba(0, 122, 204, 0.25);
+      border: 1px solid rgba(0, 122, 204, 0.5);
+      color: #61afef;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      font-family: Consolas, monospace;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-action {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-main);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .btn-action:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--border-color);
+      color: #fff;
+    }
+
+    .btn-action:active {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .btn-action.btn-save {
+      background: rgba(0, 122, 204, 0.2);
+      border-color: rgba(0, 122, 204, 0.4);
+      color: #61afef;
+    }
+
+    .btn-action.btn-save:hover {
+      background: rgba(0, 122, 204, 0.4);
+      color: #fff;
+    }
+
+    /* Main Container */
+    #main-container {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Left Sidebar: File Tree */
+    #sidebar {
+      width: 250px;
+      min-width: 180px;
+      max-width: 500px;
+      background-color: var(--bg-sidebar);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width 0.18s ease, min-width 0.18s ease;
+      overflow: hidden;
+    }
+
+    #sidebar.collapsed {
+      width: 0 !important;
+      min-width: 0 !important;
+      border-right: none;
+    }
+
+    #sidebar-resizer.collapsed {
+      display: none;
+    }
+
+    /* Sidebar toggle button – sits on the left edge of the tab-bar */
+    #btn-sidebar-toggle {
+      width: 26px;
+      height: 34px;
+      flex-shrink: 0;
+      background: var(--bg-tab-bar);
+      border: none;
+      border-right: 1px solid var(--border-color);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
+      user-select: none;
+    }
+    #btn-sidebar-toggle:hover {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+    }
+
+    /* Active file highlight in tree */
+    .tree-node.tree-active-file {
+      background-color: rgba(0, 122, 204, 0.35) !important;
+      color: #fff;
+      outline: 1px solid rgba(0, 122, 204, 0.6);
+      outline-offset: -1px;
+      border-radius: 2px;
+    }
+
+    .sidebar-header {
+      height: 32px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .sidebar-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .sidebar-icon-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    .sidebar-icon-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .sidebar-path-bar {
+      padding: 4px 8px;
+      background: #1e1e1e;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sidebar-path-input {
+      flex: 1;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #9cdcfe;
+      font-family: Consolas, monospace;
+      font-size: 11.5px;
+      padding: 2px 4px;
+      border-radius: 3px;
+      outline: none;
+    }
+
+    .sidebar-path-input:focus {
+      background: #252526;
+      border-color: var(--accent);
+    }
+
+    #file-tree-container {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 4px 0;
+    }
+
+    .tree-node {
+      padding: 3px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      color: var(--text-main);
+      font-size: 12.5px;
+      white-space: nowrap;
+      height: 24px;
+      line-height: 24px;
+    }
+
+    .tree-node-left {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .tree-node-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tree-node-size {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      font-family: Consolas, monospace;
+      margin-left: 6px;
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+
+    .tree-node:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .tree-node.active {
+      background-color: rgba(0, 122, 204, 0.25);
+      color: #fff;
+    }
+
+    .tree-chevron {
+      font-size: 9px;
+      width: 14px;
+      text-align: center;
+      display: inline-block;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .tree-chevron-spacer {
+      width: 14px;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .node-icon {
+      font-size: 13px;
+      width: 16px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .tree-children {
+      display: none;
+    }
+
+    /* Sidebar Resizer */
+    #sidebar-resizer {
+      width: 4px;
+      cursor: col-resize;
+      background: transparent;
+      transition: background 0.15s;
+    }
+
+    #sidebar-resizer:hover, #sidebar-resizer.resizing {
+      background: var(--accent);
+    }
+
+    /* Right Main: Editor & Tabs */
+    #editor-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background-color: var(--bg-main);
+    }
+
+    /* Tab Bar */
+    #tab-bar {
+      height: 35px;
+      background-color: var(--bg-tab-bar);
+      display: flex;
+      align-items: flex-end;
+      overflow-x: auto;
+      overflow-y: hidden;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+
+    #tab-bar::-webkit-scrollbar {
+      height: 3px;
+    }
+    #tab-bar::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .tab-item {
+      height: 34px;
+      padding: 0 10px;
+      background-color: var(--bg-tab);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .tab-item:hover {
+      background-color: var(--bg-tab-hover);
+      color: var(--text-main);
+    }
+
+    .tab-item.active {
+      background-color: var(--bg-tab-active);
+      color: var(--text-active);
+      border-top: 2px solid var(--accent);
+    }
+
+    .tab-item.preview {
+      font-style: italic;
+    }
+
+    .tab-item.pinned {
+      font-style: normal;
+    }
+
+    .tab-pin-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      margin-right: 5px;
+      opacity: 0.35;
+      cursor: pointer;
+      border-radius: 3px;
+      padding: 1px 3px;
+      transition: opacity 0.15s, transform 0.15s, background-color 0.15s;
+    }
+
+    .tab-item:hover .tab-pin-btn {
+      opacity: 0.75;
+    }
+
+    .tab-pin-btn:hover {
+      opacity: 1 !important;
+      background-color: rgba(255, 255, 255, 0.15);
+      transform: scale(1.2);
+    }
+
+    .tab-item.pinned .tab-pin-btn {
+      opacity: 1;
+      filter: drop-shadow(0 0 3px rgba(229, 192, 123, 0.9));
+    }
+
+    /* Context Menus */
+    #tab-context-menu, #tree-context-menu {
+      position: fixed;
+      z-index: 2000;
+      background: #1e1e22;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 4px 0;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+      font-size: 12px;
+      color: #ddd;
+      min-width: 150px;
+    }
+    #tab-context-menu.hidden, #tree-context-menu.hidden {
+      display: none !important;
+    }
+    .ctx-item {
+      padding: 6px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.1s;
+    }
+    .ctx-item:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+    .ctx-divider {
+      height: 1px;
+      background: var(--border-color);
+      margin: 4px 0;
+    }
+
+    .tab-dirty-indicator {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--dirty-dot);
+      display: none;
+    }
+
+    .tab-item.dirty .tab-dirty-indicator {
+      display: block;
+    }
+
+    .tab-close-btn {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      font-size: 12px;
+      opacity: 0.6;
+    }
+
+    .tab-close-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      opacity: 1;
+    }
+
+    /* Editor Viewport */
+    #editor-viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      gap: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      opacity: 0.35;
+    }
+
+    .empty-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: #aaa;
+    }
+
+    .empty-hint {
+      font-size: 12.5px;
+      max-width: 420px;
+      line-height: 1.6;
+    }
+
+    /* Monaco Container */
+    #monaco-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: none;
+    }
+
+    /* Fallback Textarea Editor */
+    #fallback-wrapper {
+      display: none;
+      flex: 1;
+      flex-direction: row;
+      overflow: hidden;
+      background: #1e1e1e;
+    }
+
+    #fallback-line-numbers {
+      width: 48px;
+      background-color: #1e1e1e;
+      color: #858585;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13.5px;
+      line-height: 1.5;
+      text-align: right;
+      padding: 12px 8px 12px 0;
+      border-right: 1px solid #2d2d2d;
+      user-select: none;
+      overflow: hidden;
+    }
+
+    #fallback-textarea {
+      flex: 1;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13.5px;
+      line-height: 1.5;
+      padding: 12px 16px;
+      border: none;
+      outline: none;
+      resize: none;
+      white-space: pre;
+      overflow: auto;
+      tab-size: 4;
+      user-select: text;
+    }
+
+    /* Image Preview Area */
+    #image-wrapper {
+      display: none;
+      flex: 1;
+      position: relative;
+      background: #141414;
+      background-image: linear-gradient(45deg, #1e1e1e 25%, transparent 25%),
+                        linear-gradient(-45deg, #1e1e1e 25%, transparent 25%),
+                        linear-gradient(45deg, transparent 75%, #1e1e1e 75%),
+                        linear-gradient(-45deg, transparent 75%, #1e1e1e 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    #image-stage {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      overflow: hidden;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+    }
+
+    #image-stage.dragging {
+      cursor: grabbing;
+    }
+
+    #image-element {
+      max-width: 90%;
+      max-height: 85%;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
+      border-radius: 4px;
+      transform-origin: center center;
+      will-change: transform;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    #image-toolbar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(30, 30, 33, 0.92);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 4px 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(8px);
+      z-index: 10;
+      color: #ccc;
+    }
+
+    .image-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-main);
+      cursor: pointer;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .image-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--border-color);
+      color: #fff;
+    }
+
+    .image-btn:active {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .image-divider {
+      width: 1px;
+      height: 14px;
+      background: var(--border-color);
+      margin: 0 4px;
+    }
+
+    #image-zoom-val {
+      font-size: 11.5px;
+      font-family: Consolas, monospace;
+      color: #aaa;
+      min-width: 44px;
+      text-align: center;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    #image-zoom-val:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    #image-info {
+      font-size: 11.5px;
+      color: #888;
+      font-family: Consolas, monospace;
+      white-space: nowrap;
+    }
+
+    /* Toast Notifications */
+    #toast {
+      position: fixed;
+      bottom: 32px;
+      right: 20px;
+      background: #333333;
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      font-size: 12.5px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      transform: translateY(10px);
+      z-index: 9999;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Bottom Status Bar */
+    #status-bar {
+      height: 22px;
+      background-color: var(--status-bg);
+      color: var(--status-fg);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    .status-left, .status-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Log Drawer / Modal */
+    #log-modal {
+      position: fixed;
+      bottom: 22px;
+      right: 12px;
+      width: min(820px, calc(100vw - 24px));
+      height: 380px;
+      background: #141416;
+      border: 1px solid var(--border-color);
+      border-radius: 8px 8px 0 0;
+      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+      backdrop-filter: blur(10px);
+    }
+    #log-modal.hidden {
+      display: none !important;
+    }
+    .log-header {
+      height: 36px;
+      background: #1e1e22;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-weight: 600;
+      font-size: 12px;
+      border-radius: 8px 8px 0 0;
+    }
+    .log-tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .log-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #ccc;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .log-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
+    .log-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11.5px;
+      line-height: 1.5;
+      background: #0f0f11;
+      color: #ddd;
+      user-select: text;
+    }
+    .log-line {
+      margin-bottom: 3px;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+    .log-time { color: #5c6370; margin-right: 6px; }
+    .log-tag-info { color: #61afef; }
+    .log-tag-send { color: #98c379; }
+    .log-tag-recv { color: #c678dd; }
+    .log-tag-error { color: #e06c75; font-weight: bold; }
+    .log-tag-host { color: #e5c07b; }
+
+    /* Markdown Full-Page Preview Area */
+    #markdown-wrapper {
+      display: none;
+      flex: 1;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg-main);
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 10;
+    }
+
+    .md-header-toolbar {
+      height: 35px;
+      background: #252528;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .md-header-toolbar .md-title {
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .md-header-toolbar .md-btn-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .md-tool-btn {
+      background: #333338;
+      border: 1px solid var(--border-color);
+      color: #ddd;
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11.5px;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .md-tool-btn:hover {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .markdown-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 50px;
+      color: #d4d4d4;
+      background: var(--bg-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      font-size: 14.5px;
+      line-height: 1.7;
+      box-sizing: border-box;
+      max-width: 1000px;
+      margin: 0 auto;
+      width: 100%;
+      user-select: text;
+    }
+
+    .markdown-body::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    .markdown-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 5px;
+    }
+    .markdown-body::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .markdown-body h1, .markdown-body h2, .markdown-body h3, 
+    .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+      margin-top: 24px;
+      margin-bottom: 14px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: #f0f0f0;
+    }
+
+    .markdown-body h1 {
+      font-size: 2em;
+      padding-bottom: 0.3em;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .markdown-body h2 {
+      font-size: 1.5em;
+      padding-bottom: 0.3em;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .markdown-body h3 { font-size: 1.25em; }
+    .markdown-body h4 { font-size: 1.05em; }
+
+    .markdown-body p, .markdown-body ul, .markdown-body ol {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+
+    .markdown-body ul, .markdown-body ol {
+      padding-left: 2em;
+    }
+
+    .markdown-body li {
+      margin-top: 0.25em;
+    }
+
+    .markdown-body a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    .markdown-body a:hover {
+      text-decoration: underline;
+    }
+
+    .markdown-body blockquote {
+      padding: 4px 1em;
+      color: #8b949e;
+      border-left: 4px solid #3b82f6;
+      margin: 16px 0;
+      background: rgba(59, 130, 246, 0.06);
+      border-radius: 0 4px 4px 0;
+    }
+
+    .markdown-body code {
+      padding: 0.2em 0.45em;
+      margin: 0;
+      font-size: 85%;
+      background-color: rgba(110, 118, 129, 0.25);
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      color: #f38ba8;
+    }
+
+    .markdown-body pre {
+      padding: 16px;
+      overflow: auto;
+      font-size: 88%;
+      line-height: 1.45;
+      background-color: #141416;
+      border: 1px solid #2d2d30;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+
+    .markdown-body pre code {
+      background-color: transparent;
+      padding: 0;
+      margin: 0;
+      font-size: 100%;
+      border-radius: 0;
+      color: #c9d1d9;
+    }
+
+    .markdown-body table {
+      border-spacing: 0;
+      border-collapse: collapse;
+      margin: 16px 0;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+    }
+
+    .markdown-body table th, .markdown-body table td {
+      padding: 8px 14px;
+      border: 1px solid #38383e;
+    }
+
+    .markdown-body table th {
+      font-weight: 600;
+      background-color: #21262d;
+      color: #f0f6fc;
+    }
+
+    .markdown-body table tr:nth-child(2n) {
+      background-color: #161b22;
+    }
+
+    .markdown-body hr {
+      height: 2px;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #30363d;
+      border: 0;
+    }
+
+    /* KaTeX Equations in Markdown */
+    .markdown-body .katex-display {
+      margin: 1.4em 0;
+      padding: 14px 18px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 6px;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    /* Mermaid Containers in Markdown */
+    .markdown-body .mermaid {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 24px 0;
+      padding: 20px;
+      background: #18181c;
+      border: 1px solid #2d2d32;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+
+    .markdown-body .mermaid svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* Markdown preview toggle button */
+    .btn-action.btn-preview {
+      background-color: #238636;
+      color: #fff;
+    }
+    .btn-action.btn-preview:hover {
+      background-color: #2ea043;
+    }
+    .btn-action.btn-preview.active {
+      background-color: #d97706;
+    }
+    /* Open Remote Path Modal Dialog */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      opacity: 1;
+      transition: opacity 0.15s ease;
+    }
+    .modal-overlay.hidden {
+      display: none !important;
+    }
+    .modal-dialog {
+      width: 520px;
+      max-width: calc(100vw - 32px);
+      background: #1e1e24;
+      border: 1px solid #3c3c46;
+      border-radius: 8px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: modalSlideIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes modalSlideIn {
+      from { transform: translateY(-16px) scale(0.97); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .modal-header {
+      height: 38px;
+      background: #25252c;
+      border-bottom: 1px solid #33333d;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      font-weight: 600;
+      font-size: 12.5px;
+      color: #e6e6e6;
+    }
+    .modal-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .modal-close-btn {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    .modal-close-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+    .modal-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: #1c1c22;
+    }
+    .modal-desc {
+      font-size: 12px;
+      color: #abb2bf;
+      line-height: 1.5;
+    }
+    .modal-desc code {
+      background: rgba(255, 255, 255, 0.08);
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: #e5c07b;
+      font-family: Consolas, monospace;
+    }
+    .modal-input-wrap {
+      position: relative;
+      width: 100%;
+    }
+    .modal-input {
+      width: 100%;
+      height: 34px;
+      background: #141418;
+      border: 1px solid #434552;
+      border-radius: 5px;
+      color: #e6e6e6;
+      padding: 0 10px;
+      font-size: 13px;
+      font-family: Consolas, "Courier New", monospace;
+      outline: none;
+      box-sizing: border-box;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .modal-input:focus {
+      border-color: #61afef;
+      box-shadow: 0 0 0 2px rgba(97, 175, 239, 0.25);
+    }
+    .modal-quick-chips {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .chip-label {
+      font-size: 11px;
+      color: #7f848e;
+    }
+    .quick-chip {
+      background: #252830;
+      border: 1px solid #3c404b;
+      color: #abb2bf;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .quick-chip:hover {
+      background: #343a46;
+      color: #61afef;
+      border-color: #61afef;
+    }
+    .modal-status {
+      font-size: 11.5px;
+      padding: 7px 10px;
+      border-radius: 4px;
+      line-height: 1.4;
+      word-break: break-all;
+    }
+    .modal-status.loading {
+      background: rgba(97, 175, 239, 0.12);
+      color: #61afef;
+      border: 1px solid rgba(97, 175, 239, 0.28);
+    }
+    .modal-status.error {
+      background: rgba(224, 108, 117, 0.12);
+      color: #e06c75;
+      border: 1px solid rgba(224, 108, 117, 0.28);
+    }
+    .modal-status.success {
+      background: rgba(152, 195, 121, 0.12);
+      color: #98c379;
+      border: 1px solid rgba(152, 195, 121, 0.28);
+    }
+    .modal-status.hidden {
+      display: none !important;
+    }
+    .modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #25252c;
+      border-top: 1px solid #33333d;
+    }
+    .modal-footer-hint {
+      font-size: 11px;
+      color: #7f848e;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .modal-footer-hint kbd {
+      background: #1c1c22;
+      border: 1px solid #434552;
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-size: 10px;
+      color: #abb2bf;
+      font-family: inherit;
+    }
+    .modal-footer-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    .modal-btn {
+      padding: 5px 14px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .modal-btn-secondary {
+      background: #2c313a;
+      border: 1px solid #3e4451;
+      color: #abb2bf;
+    }
+    .modal-btn-secondary:hover {
+      background: #3e4451;
+      color: #fff;
+    }
+    .modal-btn-primary {
+      background: #2b74b9;
+      border: 1px solid #388bfd;
+      color: #fff;
+      font-weight: 600;
+    }
+    .modal-btn-primary:hover {
+      background: #388bfd;
+    }
+    .modal-btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top App Bar -->
+  <div id="top-bar">
+    <div class="top-left">
+      <div class="app-title">
+        <span>📑</span> PuTTY SFTP Remote Editor
+      </div>
+      <div id="session-badge" class="session-badge">Session --</div>
+    </div>
+    <div class="top-actions">
+      <button class="btn-action" id="btn-open-path" title="打开/定位远程文件或文件夹 (Ctrl+O)">📂 打开...</button>
+      <button class="btn-action btn-save" id="btn-save" title="保存文件 (Ctrl+S)">💾 保存</button>
+      <button class="btn-action btn-preview" id="btn-md-preview" style="display: none;" title="切换 Markdown 预览/编辑 (Ctrl+Shift+V)">👁️ 预览</button>
+      <button class="btn-action" id="btn-refresh" title="刷新文件列表">🔄 刷新</button>
+      <button class="btn-action" id="btn-logs" title="查看运行与通信日志">📋 日志 <span id="log-badge" style="display:none;background:#e06c75;color:#fff;border-radius:8px;padding:0 5px;font-size:10px;margin-left:2px;">!</span></button>
+      <button class="btn-action" id="btn-close" title="关闭窗口">✕ 关闭</button>
+    </div>
+  </div>
+
+  <!-- Main Work Area -->
+  <div id="main-container">
+    <!-- Left Sidebar: Remote File Tree -->
+    <div id="sidebar">
+      <div class="sidebar-header">
+        <span>📁 远程文件</span>
+        <div class="sidebar-actions">
+          <button class="sidebar-icon-btn" id="btn-tree-open" title="打开/定位远程路径 (Ctrl+O)">📂</button>
+          <button class="sidebar-icon-btn" id="btn-tree-up" title="上一级目录">⬆️</button>
+          <button class="sidebar-icon-btn" id="btn-tree-new" title="新建文件">➕</button>
+          <button class="sidebar-icon-btn" id="btn-tree-refresh" title="刷新目录">🔄</button>
+        </div>
+      </div>
+      <div class="sidebar-path-bar">
+        <input type="text" id="sidebar-path-input" class="sidebar-path-input" value="/" spellcheck="false" />
+      </div>
+      <div id="file-tree-container">
+        <div class="tree-node active">
+          <span class="node-icon">⏳</span>
+          <span>正在连接 SFTP 引擎...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Resizer -->
+    <div id="sidebar-resizer"></div>
+
+    <!-- Right Main Area: Tabs + Editor -->
+    <div id="editor-container">
+      <!-- Tabs -->
+      <div id="tab-bar">
+        <button id="btn-sidebar-toggle" title="隐藏/展开侧边栏 (Ctrl+B)">◀</button>
+        <!-- Tab items injected here -->
+      </div>
+
+      <!-- Editor Viewport -->
+      <div id="editor-viewport">
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon">📁</div>
+          <div class="empty-title">PuTTY Remote File Editor</div>
+          <div class="empty-hint">
+            从左侧文件树选择文件打开，或在终端超链接中点击自动跨窗口跳转定位。<br>
+            双击标签可固定 (Pin Tab)，按 <code>Ctrl+S</code> 自动保存到远程服务器。
+          </div>
+        </div>
+
+        <div id="monaco-container"></div>
+
+        <div id="fallback-wrapper">
+          <div id="fallback-line-numbers">1</div>
+          <textarea id="fallback-textarea" spellcheck="false"></textarea>
+        </div>
+
+        <div id="image-wrapper">
+          <div id="image-stage">
+            <img id="image-element" src="" alt="Preview" draggable="false" />
+          </div>
+          <div id="image-toolbar">
+            <button class="image-btn" id="btn-zoom-out" title="缩小 (Zoom Out)">−</button>
+            <span id="image-zoom-val" title="点击重置缩放">100%</span>
+            <button class="image-btn" id="btn-zoom-in" title="放大 (Zoom In)">+</button>
+            <div class="image-divider"></div>
+            <button class="image-btn" id="btn-zoom-fit" title="适应窗口 (Fit)">⛶</button>
+            <button class="image-btn" id="btn-zoom-reset" title="原始大小 1:1 (Reset)">1:1</button>
+            <div class="image-divider"></div>
+            <div id="image-info">-- × --</div>
+          </div>
+        </div>
+
+        <!-- Markdown Full-Page Preview Area -->
+        <div id="markdown-wrapper">
+          <div class="md-header-toolbar">
+            <div class="md-title">
+              <span>📑</span>
+              <span id="md-preview-title">Markdown Preview</span>
+            </div>
+            <div class="md-btn-group">
+              <button class="md-tool-btn" id="btn-md-edit-back" title="返回编辑源码 (Ctrl+Shift+V)">✏️ 返回源码编辑</button>
+              <button class="md-tool-btn" id="btn-md-refresh" title="重新解析渲染">🔄 刷新渲染</button>
+            </div>
+          </div>
+          <div id="markdown-body" class="markdown-body"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div id="status-bar">
+    <div class="status-left">
+      <div class="status-item" id="status-conn">● 初始化中...</div>
+      <div class="status-item" id="status-path">/</div>
+      <div class="status-item" id="status-log-btn" style="cursor:pointer; opacity: 0.9;" title="点击打开日志面板">📋 日志</div>
+    </div>
+    <div class="status-right">
+      <div class="status-item" id="status-pos">Ln 1, Col 1</div>
+      <div class="status-item" id="status-encoding">UTF-8</div>
+      <div class="status-item" id="status-lang">Plain Text</div>
+    </div>
+  </div>
+
+  <!-- Log Drawer / Modal -->
+  <div id="log-modal" class="hidden">
+    <div class="log-header">
+      <div class="log-title">
+        <span>📋</span> 内存运行日志 (最近1000行)
+      </div>
+      <div class="log-tools">
+        <label style="font-size: 11px; font-weight: normal; display: flex; align-items: center; gap: 4px; color: #aaa; cursor: pointer; margin-right: 6px;">
+          <input type="checkbox" id="chk-log-autoscroll" checked /> 自动滚动
+        </label>
+        <button class="log-btn" id="btn-log-fetch-host" title="拉取 PuTTY C 宿主底层日志">🔄 拉取宿主日志</button>
+        <button class="log-btn" id="btn-log-copy" title="复制全部日志到剪贴板">📋 复制</button>
+        <button class="log-btn" id="btn-log-clear" title="清空当前日志">🗑️ 清空</button>
+        <button class="log-btn" id="btn-log-close" title="关闭日志面板">✕</button>
+      </div>
+    </div>
+    <div class="log-content" id="log-container"></div>
+  </div>
+
+  <!-- Open Remote Path Modal Dialog -->
+  <div id="open-path-modal" class="modal-overlay hidden">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span>📂</span> 打开远程文件或文件夹
+        </div>
+        <button class="modal-close-btn" id="btn-modal-close" title="关闭 (Esc)">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-desc">
+          输入远程服务器的文件或目录路径（支持 <code>~</code> 用户主目录）。<br>
+          • 若是<strong>文件</strong>：将直接在编辑器新标签页中打开。<br>
+          • 若是<strong>文件夹</strong>：将自动在左侧文件树中定位并展开。
+        </div>
+        <div class="modal-input-wrap">
+          <input type="text" id="input-open-path" class="modal-input" placeholder="例如: /etc/nginx/nginx.conf, /var/log, ~/.bashrc" spellcheck="false" autocomplete="off" />
+        </div>
+        <div class="modal-quick-chips">
+          <span class="chip-label">快捷路径:</span>
+          <button type="button" class="quick-chip" data-path="~">~ 主目录</button>
+          <button type="button" class="quick-chip" data-path="/">/ 根目录</button>
+          <button type="button" class="quick-chip" data-path="/etc">/etc</button>
+          <button type="button" class="quick-chip" data-path="/var/log">/var/log</button>
+          <button type="button" class="quick-chip" data-path="/tmp">/tmp</button>
+        </div>
+        <div id="open-path-status" class="modal-status hidden"></div>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-footer-hint">按 <kbd>Enter</kbd> 确认，按 <kbd>Esc</kbd> 取消</div>
+        <div class="modal-footer-buttons">
+          <button class="modal-btn modal-btn-secondary" id="btn-open-path-cancel">取消</button>
+          <button class="modal-btn modal-btn-primary" id="btn-open-path-confirm">打开 / 定位</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">已保存</div>
+
+  <!-- Tab Right-Click Context Menu -->
+  <div id="tab-context-menu" class="hidden">
+    <div class="ctx-item" id="ctx-tab-download">📥 下载此文件到本地...</div>
+    <div class="ctx-item" id="ctx-tab-copy-path">📋 复制文件路径</div>
+    <div class="ctx-divider"></div>
+    <div class="ctx-item" id="ctx-tab-pin">📌 固定标签页</div>
+    <div class="ctx-divider"></div>
+    <div class="ctx-item" id="ctx-tab-close">✕ 关闭</div>
+    <div class="ctx-item" id="ctx-tab-close-others">✕ 关闭其他标签页</div>
+  </div>
+
+  <!-- Tree Right-Click Context Menu -->
+  <div id="tree-context-menu" class="hidden">
+    <div class="ctx-item" id="ctx-tree-open">✏️ 在编辑器中打开</div>
+    <div class="ctx-item" id="ctx-tree-refresh">🔄 刷新目录</div>
+    <div class="ctx-divider"></div>
+    <div class="ctx-item" id="ctx-tree-download">📥 下载到本地...</div>
+    <div class="ctx-divider"></div>
+    <div class="ctx-item" id="ctx-tree-copy-path">📋 复制远程路径</div>
+  </div>
+
+  <!-- Offline Markdown, KaTeX & Mermaid Engines -->
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/katex/katex.min.js"></script>
+  <script src="vendor/katex/contrib/auto-render.min.js"></script>
+  <script src="vendor/mermaid.min.js"></script>
+
+  <!-- Monaco Editor AMD Loader -->
+  <script src="vs/loader.js"></script>
+
+  <script>
+    (function () {
+      // 1. Configure Monaco Web Workers for local file/webview environment
+      window.MonacoEnvironment = {
+        getWorkerUrl: function (workerId, label) {
+          let workerPath = 'vs/editor/editor.worker.js';
+          if (label === 'json') workerPath = 'vs/language/json/json.worker.js';
+          else if (label === 'css' || label === 'scss' || label === 'less') workerPath = 'vs/language/css/css.worker.js';
+          else if (label === 'html') workerPath = 'vs/language/html/html.worker.js';
+          else if (label === 'typescript' || label === 'javascript') workerPath = 'vs/language/typescript/ts.worker.js';
+
+          return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+            self.MonacoEnvironment = {
+              baseUrl: '${new URL('.', window.location.href).href}'
+            };
+            importScripts('${new URL(workerPath, window.location.href).href}');
+          `)}`;
+        }
+      };
+
+      // 2. Configure Mermaid for Dark Theme
+      if (window.mermaid) {
+        try {
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            securityLevel: 'loose',
+            darkMode: true,
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Consolas, sans-serif'
+          });
+        } catch (e) {
+          console.warn('[Mermaid] init failed:', e);
+        }
+      }
+
+      // 3. Image Viewer Controller (Zoom, Pan, Fit, 1:1, Reset)
+      const imageViewer = {
+        scale: 1,
+        translateX: 0,
+        translateY: 0,
+        isDragging: false,
+        startX: 0,
+        startY: 0,
+        startTranslateX: 0,
+        startTranslateY: 0,
+        naturalWidth: 0,
+        naturalHeight: 0,
+
+        init() {
+          const stage = document.getElementById('image-stage');
+          const zoomVal = document.getElementById('image-zoom-val');
+
+          // Wheel zoom
+          stage.addEventListener('wheel', e => {
+            e.preventDefault();
+            const delta = e.deltaY < 0 ? 1.15 : 0.87;
+            this.zoomAt(delta, e.clientX, e.clientY);
+          }, { passive: false });
+
+          // Mouse drag pan
+          stage.addEventListener('mousedown', e => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            this.isDragging = true;
+            this.startX = e.clientX;
+            this.startY = e.clientY;
+            this.startTranslateX = this.translateX;
+            this.startTranslateY = this.translateY;
+            stage.classList.add('dragging');
+          });
+
+          window.addEventListener('mousemove', e => {
+            if (!this.isDragging) return;
+            this.translateX = this.startTranslateX + (e.clientX - this.startX);
+            this.translateY = this.startTranslateY + (e.clientY - this.startY);
+            this.applyTransform();
+          });
+
+          window.addEventListener('mouseup', () => {
+            if (this.isDragging) {
+              this.isDragging = false;
+              stage.classList.remove('dragging');
+            }
+          });
+
+          // Double click toggle zoom
+          stage.addEventListener('dblclick', e => {
+            e.preventDefault();
+            if (Math.abs(this.scale - 1) < 0.05) {
+              this.zoomAt(2.0, e.clientX, e.clientY);
+            } else {
+              this.reset();
+            }
+          });
+
+          // Toolbar buttons
+          document.getElementById('btn-zoom-in').addEventListener('click', () => {
+            this.zoomAt(1.25);
+          });
+          document.getElementById('btn-zoom-out').addEventListener('click', () => {
+            this.zoomAt(0.8);
+          });
+          document.getElementById('btn-zoom-reset').addEventListener('click', () => {
+            this.reset();
+          });
+          document.getElementById('btn-zoom-fit').addEventListener('click', () => {
+            this.fit();
+          });
+          zoomVal.addEventListener('click', () => {
+            this.reset();
+          });
+        },
+
+        reset() {
+          this.scale = 1;
+          this.translateX = 0;
+          this.translateY = 0;
+          this.applyTransform();
+        },
+
+        fit() {
+          const stage = document.getElementById('image-stage');
+          if (!stage || !this.naturalWidth || !this.naturalHeight) {
+            this.reset();
+            return;
+          }
+          const stageRect = stage.getBoundingClientRect();
+          const padW = stageRect.width * 0.9;
+          const padH = stageRect.height * 0.85;
+          const scaleW = padW / this.naturalWidth;
+          const scaleH = padH / this.naturalHeight;
+          this.scale = Math.min(scaleW, scaleH, 1.0);
+          this.translateX = 0;
+          this.translateY = 0;
+          this.applyTransform();
+        },
+
+        zoomAt(factor, clientX = null, clientY = null) {
+          const prevScale = this.scale;
+          let newScale = prevScale * factor;
+          newScale = Math.max(0.05, Math.min(30.0, newScale));
+
+          if (clientX !== null && clientY !== null) {
+            const stage = document.getElementById('image-stage');
+            const rect = stage.getBoundingClientRect();
+            const mouseX = clientX - (rect.left + rect.width / 2);
+            const mouseY = clientY - (rect.top + rect.height / 2);
+
+            const ratio = newScale / prevScale;
+            this.translateX = mouseX - (mouseX - this.translateX) * ratio;
+            this.translateY = mouseY - (mouseY - this.translateY) * ratio;
+          }
+
+          this.scale = newScale;
+          this.applyTransform();
+        },
+
+        applyTransform() {
+          const img = document.getElementById('image-element');
+          if (img) {
+            img.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+          }
+          const zoomVal = document.getElementById('image-zoom-val');
+          if (zoomVal) {
+            zoomVal.textContent = Math.round(this.scale * 100) + '%';
+          }
+        },
+
+        updateInfo(width, height, sizeStr) {
+          this.naturalWidth = width;
+          this.naturalHeight = height;
+          const infoEl = document.getElementById('image-info');
+          if (infoEl) {
+            infoEl.textContent = `${width} × ${height} px (${sizeStr})`;
+          }
+        }
+      };
+
+      // 3. Editor Bridge & State Management
+      const bridge = {
+        sessionId: 0,
+        sessionName: '',
+        host: '',
+        currentDir: '/',
+        homedir: '/',
+        reqCounter: 1,
+        pendingReqs: new Map(),
+
+        // Monaco instance
+        monacoReady: false,
+        editor: null,
+
+        // Open tabs map: path => { path, name, model, originalContent, isDirty, isPinned, isBinary, size, viewState }
+        tabs: new Map(),
+        activePath: null,
+        pendingOpenFile: null,
+        sftpReady: false,
+        logs: [],
+
+        log(level, tag, message) {
+          this.logLines([{ level, tag, message }]);
+        },
+
+        logLines(items) {
+          if (!items || items.length === 0) return;
+          const now = new Date();
+          const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+
+          const container = document.getElementById('log-container');
+          const fragment = container ? document.createDocumentFragment() : null;
+          let hasError = false;
+
+          for (const item of items) {
+            const tStr = item.time || timeStr;
+            const fullItem = { time: tStr, level: item.level, tag: item.tag, message: item.message };
+            this.logs.push(fullItem);
+            if (item.level === 'error') hasError = true;
+
+            if (fragment) {
+              const lineEl = document.createElement('div');
+              lineEl.className = 'log-line';
+              lineEl.innerHTML = `<span class="log-time">[${tStr}]</span> <span class="log-tag-${item.level}">[${item.tag}]</span> ${this.escapeHtml(item.message)}`;
+              fragment.appendChild(lineEl);
+            }
+          }
+
+          while (this.logs.length > 1000) {
+            this.logs.shift();
+          }
+
+          if (container && fragment) {
+            container.appendChild(fragment);
+            while (container.children.length > 1000) {
+              container.removeChild(container.firstElementChild);
+            }
+            if (document.getElementById('chk-log-autoscroll')?.checked !== false) {
+              container.scrollTop = container.scrollHeight;
+            }
+          }
+
+          if (hasError) {
+            const badge = document.getElementById('log-badge');
+            if (badge) badge.style.display = 'inline';
+            const statBadge = document.getElementById('status-log-btn');
+            if (statBadge) statBadge.style.color = '#f48771';
+          }
+        },
+
+        escapeHtml(str) {
+          if (typeof str !== 'string') {
+            try { str = JSON.stringify(str); } catch (e) { str = String(str); }
+          }
+          return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        },
+
+        toggleLogModal(forceState) {
+          const modal = document.getElementById('log-modal');
+          if (!modal) return;
+          const show = (forceState !== undefined) ? forceState : modal.classList.contains('hidden');
+          modal.classList.toggle('hidden', !show);
+          if (show) {
+            const badge = document.getElementById('log-badge');
+            if (badge) badge.style.display = 'none';
+            const statBadge = document.getElementById('status-log-btn');
+            if (statBadge) statBadge.style.color = '';
+            const container = document.getElementById('log-container');
+            if (container) container.scrollTop = container.scrollHeight;
+          }
+        },
+
+        showOpenPathModal(defaultPath) {
+          const modal = document.getElementById('open-path-modal');
+          if (!modal) return;
+          const input = document.getElementById('input-open-path');
+          const statusEl = document.getElementById('open-path-status');
+          const btnConfirm = document.getElementById('btn-open-path-confirm');
+          if (statusEl) {
+            statusEl.className = 'modal-status hidden';
+            statusEl.textContent = '';
+          }
+          if (btnConfirm) btnConfirm.disabled = false;
+          if (input) {
+            input.value = defaultPath || this.currentDir || '/';
+          }
+          modal.classList.remove('hidden');
+          setTimeout(() => {
+            if (input) {
+              input.focus();
+              input.select();
+            }
+          }, 60);
+        },
+
+        hideOpenPathModal() {
+          const modal = document.getElementById('open-path-modal');
+          if (!modal) return;
+          modal.classList.add('hidden');
+          const statusEl = document.getElementById('open-path-status');
+          if (statusEl) {
+            statusEl.className = 'modal-status hidden';
+            statusEl.textContent = '';
+          }
+        },
+
+        async openRemotePath(rawPath) {
+          if (!rawPath) return { success: false, error: '路径为空' };
+
+          // Normalize Windows backslashes
+          let p = rawPath.trim().replace(/\\/g, '/');
+
+          // Resolve home dir '~'
+          if (p === '~') {
+            p = this.homedir || '/';
+          } else if (p.startsWith('~/')) {
+            const home = (this.homedir || '/').replace(/\/+$/, '');
+            p = home + p.slice(1);
+          } else if (!p.startsWith('/')) {
+            const base = (this.currentDir || '/').replace(/\/+$/, '');
+            p = base + '/' + p;
+          }
+
+          // Normalize multiple consecutive slashes, but keep leading slash
+          p = p.replace(/\/{2,}/g, '/');
+
+          try {
+            const resp = await this.stat(p);
+            if (resp && resp.success) {
+              if (resp.isDir) {
+                await this.loadDirectory(p);
+                this.showToast(`已定位并展开目录: ${p}`);
+                return { success: true, isDir: true, path: p };
+              } else {
+                await this.openFile(p, 0, true);
+                this.showToast(`已打开文件: ${p}`);
+                return { success: true, isDir: false, path: p };
+              }
+            } else {
+              // If stat failed, but path ended with slash or might be a directory, try listDir
+              if (p.endsWith('/')) {
+                const listResp = await this.listDir(p);
+                if (listResp && listResp.success) {
+                  await this.loadDirectory(p);
+                  this.showToast(`已定位并展开目录: ${p}`);
+                  return { success: true, isDir: true, path: p };
+                }
+              }
+              const err = resp?.error || '无法获取路径信息 (可能不存在或无权限)';
+              this.log('error', 'OPEN_PATH', `定位路径失败: ${p} 错误: ${err}`);
+              return { success: false, error: err, path: p };
+            }
+          } catch (err) {
+            this.log('error', 'OPEN_PATH', `定位路径异常: ${p} 错误: ${err.message || err}`);
+            return { success: false, error: err.message || String(err), path: p };
+          }
+        },
+
+        async handleOpenPathConfirm() {
+          const input = document.getElementById('input-open-path');
+          const statusEl = document.getElementById('open-path-status');
+          const btnConfirm = document.getElementById('btn-open-path-confirm');
+          if (!input) return;
+
+          const raw = input.value.trim();
+          if (!raw) {
+            if (statusEl) {
+              statusEl.className = 'modal-status error';
+              statusEl.textContent = '⚠️ 请输入有效的远程文件或目录路径';
+            }
+            input.focus();
+            return;
+          }
+
+          if (statusEl) {
+            statusEl.className = 'modal-status loading';
+            statusEl.textContent = `⏳ 正在检测远程路径属性...`;
+          }
+          if (btnConfirm) btnConfirm.disabled = true;
+
+          try {
+            const res = await this.openRemotePath(raw);
+            if (res.success) {
+              if (statusEl) {
+                statusEl.className = 'modal-status success';
+                statusEl.textContent = res.isDir ? `📁 已成功定位并展开目录` : `📄 已成功在编辑器打开文件`;
+              }
+              this.hideOpenPathModal();
+            } else {
+              if (statusEl) {
+                statusEl.className = 'modal-status error';
+                statusEl.textContent = `❌ 打开失败: ${res.error}`;
+              }
+              input.focus();
+            }
+          } catch (err) {
+            if (statusEl) {
+              statusEl.className = 'modal-status error';
+              statusEl.textContent = `❌ 请求发生异常: ${err.message || err}`;
+            }
+            input.focus();
+          } finally {
+            if (btnConfirm) btnConfirm.disabled = false;
+          }
+        },
+
+        copyLogs() {
+          const text = this.logs.map(l => `[${l.time}] [${l.tag}] ${typeof l.message === 'string' ? l.message : JSON.stringify(l.message)}`).join('\n');
+          navigator.clipboard.writeText(text).then(() => {
+            this.showToast('日志已复制到剪贴板');
+          }).catch(() => {
+            this.showToast('复制失败，请手动选取文字');
+          });
+        },
+
+        clearLogs() {
+          this.logs = [];
+          const container = document.getElementById('log-container');
+          if (container) container.innerHTML = '';
+          this.showToast('日志已清空');
+        },
+
+        fetchHostLogs() {
+          this.log('info', 'FETCH', '正在向 PuTTY C 宿主请求最新底层调试日志...');
+          this.send({ cmd: 'get_host_log' });
+        },
+
+        send(obj) {
+          if (window.chrome && window.chrome.webview) {
+            const str = (typeof obj === 'string') ? obj : JSON.stringify(obj);
+            if (this.log) {
+              const cmdName = (typeof obj === 'object' && obj.cmd) ? obj.cmd : 'raw';
+              this.log('send', 'IPC SEND', `${cmdName} ${str.length > 120 ? str.substring(0, 120) + '...' : str}`);
+            }
+            window.chrome.webview.postMessage(str);
+          }
+        },
+
+        request(cmd, params = {}) {
+          return new Promise((resolve, reject) => {
+            const reqId = this.reqCounter++;
+            const timer = setTimeout(() => {
+              if (this.pendingReqs.has(reqId)) {
+                this.pendingReqs.delete(reqId);
+                const timeoutMsg = `请求超时 (cmd: ${cmd}, reqId: ${reqId})`;
+                this.log('error', 'TIMEOUT', timeoutMsg);
+                reject(new Error(timeoutMsg));
+              }
+            }, 30000);
+
+            this.pendingReqs.set(reqId, { resolve, reject, timer });
+            this.send({ cmd, reqId, ...params });
+          });
+        },
+
+        init() {
+          this.log('info', 'INIT', 'PuTTY Remote File Editor 初始化...');
+          imageViewer.init();
+          this.initMonaco();
+          this.send({ cmd: 'editor_init' });
+
+          if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener('message', e => {
+              this.onMessage(e.data);
+            });
+          }
+        },
+
+        initMonaco() {
+          try {
+            if (typeof require !== 'undefined') {
+              require.config({ paths: { 'vs': './vs' } });
+              require(['vs/editor/editor.main'], () => {
+                console.log('[Monaco] Loaded successfully');
+                this.log('info', 'MONACO', 'Monaco 编辑器离线引擎加载完成');
+                this.monacoReady = true;
+                const container = document.getElementById('monaco-container');
+                this.editor = monaco.editor.create(container, {
+                  theme: 'vs-dark',
+                  automaticLayout: true,
+                  fontSize: 13.5,
+                  fontFamily: 'Consolas, "Courier New", monospace',
+                  minimap: { enabled: true },
+                  scrollBeyondLastLine: false,
+                  wordWrap: 'off',
+                  renderWhitespace: 'selection',
+                  tabSize: 4,
+                  contextmenu: true
+                });
+
+                this.editor.onDidChangeCursorPosition(e => {
+                  document.getElementById('status-pos').textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+                });
+
+                this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+                  this.saveActiveFile();
+                });
+
+                this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyO, () => {
+                  this.showOpenPathModal();
+                });
+
+                if (this.pendingOpenFile) {
+                  const { path, line } = this.pendingOpenFile;
+                  this.pendingOpenFile = null;
+                  this.openFile(path, line);
+                } else if (this.activePath && this.tabs.has(this.activePath)) {
+                  this.switchTab(this.activePath, 0);
+                }
+              }, err => {
+                console.warn('[Monaco] Load failed, falling back to textarea editor:', err);
+                this.log('error', 'MONACO', 'Monaco 加载失败，降级为轻量编辑器: ' + err);
+                this.monacoReady = false;
+                if (this.pendingOpenFile) {
+                  const { path, line } = this.pendingOpenFile;
+                  this.pendingOpenFile = null;
+                  this.openFile(path, line);
+                }
+              });
+            }
+          } catch (e) {
+            console.warn('[Monaco] Init error, using fallback:', e);
+            this.log('error', 'MONACO', 'Monaco 初始化异常: ' + e);
+            this.monacoReady = false;
+            if (this.pendingOpenFile) {
+              const { path, line } = this.pendingOpenFile;
+              this.pendingOpenFile = null;
+              this.openFile(path, line);
+            }
+          }
+        },
+
+        onMessage(data) {
+          try {
+            let msg;
+            if (typeof data === 'string') {
+              try {
+                msg = JSON.parse(data);
+              } catch (parseErr) {
+                // Auto-repair common Windows paths with unescaped backslashes like C:\path
+                const sanitized = data.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, '\\\\');
+                msg = JSON.parse(sanitized);
+              }
+            } else {
+              msg = data;
+            }
+            console.log('[Editor IPC Recv]', msg.cmd, msg);
+
+            if (msg.cmd === 'host_log_resp') {
+              const raw = (msg.content || '').trim();
+              if (!raw) {
+                this.log('host', 'HOST', '(宿主内存日志为空)');
+                return;
+              }
+              const lines = raw.split('\n');
+              const items = [];
+              items.push({ level: 'host', tag: 'HOST', message: `=== 宿主内存日志 (共 ${lines.length} 行，内存环形保留最近 1000 行) ===` });
+              for (const l of lines) {
+                const trimmed = l.trim();
+                if (trimmed) {
+                  items.push({ level: 'host', tag: 'HOST', message: trimmed });
+                }
+              }
+              this.logLines(items);
+              return;
+            }
+
+            const summary = msg.cmd + (msg.error ? ` [错误: ${msg.error}]` : '') + (msg.path ? ` path=${msg.path}` : '') + (msg.success !== undefined ? ` success=${msg.success}` : '');
+            this.log(msg.error ? 'error' : 'recv', 'IPC RECV', summary);
+
+            if (msg.reqId && this.pendingReqs.has(msg.reqId)) {
+              const { resolve, timer } = this.pendingReqs.get(msg.reqId);
+              clearTimeout(timer);
+              this.pendingReqs.delete(msg.reqId);
+              resolve(msg);
+            }
+
+            switch (msg.cmd) {
+              case 'editor_init_ack':
+                this.sessionId = msg.sessionId || 0;
+                this.sessionName = msg.sessionName || 'Session';
+                this.host = msg.host || '';
+                document.getElementById('session-badge').textContent = `${this.sessionName} (${this.host})`;
+                document.getElementById('status-conn').textContent = `● 宿主已联通，正在验证 SFTP (${this.host})...`;
+                this.log('info', 'STATUS', `已连接到终端会话 ${this.sessionId} (${this.host})`);
+                break;
+
+              case 'sftp_ready':
+                this.sftpReady = true;
+                this.homedir = msg.homedir || '/';
+                this.currentDir = this.homedir;
+                document.getElementById('status-conn').textContent = `● SFTP 就绪 (${this.host})`;
+                document.getElementById('sidebar-path-input').value = this.currentDir;
+                this.log('info', 'SFTP', `SFTP 引擎认证成功就绪，初始主目录: ${this.homedir}`);
+                this.loadDirectory(this.currentDir);
+                if (this.pendingOpenFile) {
+                  const { path, line } = this.pendingOpenFile;
+                  this.pendingOpenFile = null;
+                  this.openFile(path, line);
+                }
+                break;
+
+              case 'sftp_error':
+                document.getElementById('status-conn').textContent = `⚠️ SFTP 认证/连接失败`;
+                this.showToast('SFTP 错误: ' + (msg.error || '未知错误'));
+                this.log('error', 'SFTP ERROR', msg.error || 'SFTP 连接/认证失败');
+                const tree = document.getElementById('file-tree-container');
+                tree.innerHTML = `
+                  <div class="tree-node" style="color: #f48771; padding: 12px; line-height: 1.6; white-space: normal;">
+                    <div style="font-weight: bold; margin-bottom: 6px;"><span class="node-icon">⚠️</span> SFTP 连接失败</div>
+                    <div style="font-size: 11.5px; opacity: 0.9; margin-bottom: 10px;">${this.escapeHtml(msg.error || '请确认终端已登录或在密码管理器中保存凭据')}</div>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                      <button class="log-btn" onclick="bridge.toggleLogModal(true)">📋 查看运行日志</button>
+                      <button class="log-btn" onclick="bridge.fetchHostLogs(); bridge.toggleLogModal(true)">🔄 拉取宿主底层日志</button>
+                    </div>
+                  </div>
+                `;
+                break;
+
+              case 'open_file':
+                this.log('info', 'OPEN', `打开文件请求: ${msg.path} (line ${msg.line || 1})`);
+                if (!this.sftpReady || (!this.monacoReady && typeof require !== 'undefined')) {
+                  this.pendingOpenFile = { path: msg.path, line: msg.line };
+                  if (!this.sftpReady) {
+                    this.log('info', 'SFTP', `SFTP 尚未就绪，排队等待握手完成: ${msg.path}`);
+                  }
+                } else {
+                  this.openFile(msg.path, msg.line);
+                }
+                break;
+
+              case 'sftp_download_started':
+                this.showToast(`📥 开始下载: ${msg.remotePath}`);
+                this.log('info', 'DOWNLOAD', `开始下载任务: ${msg.remotePath} => ${msg.localPath} (类型: ${msg.isDirectory ? '文件夹' : '单个文件'})`);
+                const statusPathEl = document.getElementById('status-path');
+                if (statusPathEl) {
+                  statusPathEl.textContent = `📥 正在下载: ${msg.remotePath}...`;
+                }
+                break;
+
+              case 'sftp_download_progress':
+                if (msg.isDir) {
+                  this.log('info', 'DOWNLOAD', `📁 创建本地目录: ${msg.dir} => ${msg.local}`);
+                } else {
+                  let sizeInfo = '';
+                  if (msg.size) {
+                    const sz = Number(msg.size);
+                    if (sz > 1024 * 1024) sizeInfo = ` (${(sz / (1024 * 1024)).toFixed(2)} MB)`;
+                    else if (sz > 1024) sizeInfo = ` (${(sz / 1024).toFixed(1)} KB)`;
+                    else sizeInfo = ` (${sz} B)`;
+                  }
+                  this.log('info', 'DOWNLOAD', `[#${msg.count || 1}] 正在传输: ${msg.file}${sizeInfo}`);
+                  const statusPathEl2 = document.getElementById('status-path');
+                  if (statusPathEl2) {
+                    statusPathEl2.textContent = `📥 下载中 (#${msg.count || 1}): ${msg.file}`;
+                  }
+                }
+                break;
+
+              case 'sftp_download_resp':
+                const curPathEl = document.getElementById('status-path');
+                if (curPathEl) {
+                  curPathEl.textContent = this.currentDir || '/';
+                }
+                if (msg.success) {
+                  const countMsg = (msg.totalFiles !== undefined && msg.totalFiles > 1) ? ` (共 ${msg.totalFiles} 个文件)` : '';
+                  this.showToast(`✅ 下载完成已保存至: ${msg.localPath}${countMsg}`);
+                  this.log('info', 'DOWNLOAD', `🎉 下载完成${countMsg}: ${msg.remotePath} => ${msg.localPath}`);
+                } else {
+                  this.showToast(`❌ 下载失败: ${msg.error || '未知错误'}`);
+                  this.log('error', 'DOWNLOAD', `下载失败: ${msg.remotePath} 错误: ${msg.error}`);
+                }
+                break;
+
+              case 'pong':
+                console.log('Pong from host');
+                break;
+            }
+          } catch (err) {
+            console.error('[Editor IPC parse error]', err, data);
+            this.log('error', 'PARSE', `IPC 消息解析异常: ${err.message} (原始报文前100字: ${String(data).substring(0, 100)})`);
+          }
+        },
+
+        async listDir(path) {
+          return this.request('sftp_list_dir', { path });
+        },
+
+        async readFile(path) {
+          return this.request('sftp_read_file', { path });
+        },
+
+        async writeFile(path, content, isBinary = false) {
+          return this.request('sftp_write_file', { path, content, isBinary });
+        },
+
+        async stat(path) {
+          return this.request('sftp_stat', { path });
+        },
+
+        // Collapsible Tree View with Lazy Loading
+        async loadDirectory(path) {
+          const tree = document.getElementById('file-tree-container');
+          tree.innerHTML = `
+            <div class="tree-node active">
+              <span class="node-icon">⏳</span>
+              <span>正在读取目录...</span>
+            </div>
+          `;
+          try {
+            const resp = await this.listDir(path);
+            if (!resp.success) {
+              tree.innerHTML = `
+                <div class="tree-node" style="color: #f48771;">
+                  <span class="node-icon">⚠️</span>
+                  <span>读取失败: ${resp.error || ''}</span>
+                </div>
+              `;
+              return;
+            }
+
+            this.currentDir = path;
+            document.getElementById('sidebar-path-input').value = path;
+            document.getElementById('status-path').textContent = path;
+
+            const entries = resp.entries || [];
+            entries.sort((a, b) => {
+              if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+              return a.name.localeCompare(b.name);
+            });
+
+            tree.innerHTML = '';
+
+            // Parent ".." entry if not root
+            if (path !== '/' && path !== '') {
+              const upNode = document.createElement('div');
+              upNode.className = 'tree-node';
+              upNode.style.paddingLeft = '8px';
+              upNode.innerHTML = `
+                <div class="tree-node-left">
+                  <span class="tree-chevron-spacer"></span>
+                  <span class="node-icon">📁</span>
+                  <span>..</span>
+                </div>
+              `;
+              upNode.addEventListener('click', () => {
+                const parent = path.replace(/\/[^/]+\/?$/, '') || '/';
+                this.loadDirectory(parent);
+              });
+              tree.appendChild(upNode);
+            }
+
+            for (const item of entries) {
+              const fullPath = path.endsWith('/') ? `${path}${item.name}` : `${path}/${item.name}`;
+              this.renderTreeNode(item, fullPath, tree, 0);
+            }
+
+            if (entries.length === 0) {
+              tree.innerHTML = `
+                <div class="tree-node" style="color: var(--text-muted); padding-left: 8px;">
+                  <span class="node-icon">📂</span>
+                  <span>空目录</span>
+                </div>
+              `;
+            }
+          } catch (err) {
+            tree.innerHTML = `
+              <div class="tree-node" style="color: #f48771;">
+                <span class="node-icon">⚠️</span>
+                <span>请求超时或异常</span>
+              </div>
+            `;
+          }
+        },
+
+        renderTreeNode(item, fullPath, parentContainer, level) {
+          const node = document.createElement('div');
+          node.className = 'tree-node';
+          node.style.paddingLeft = `${level * 14 + 6}px`;
+
+          const icon = this.getFileIcon(item.name, item.isDir);
+          const sizeStr = item.isDir ? '' : this.formatSize(item.size);
+
+          if (item.isDir) {
+            node.innerHTML = `
+              <div class="tree-node-left" title="${fullPath}">
+                <span class="tree-chevron">▶</span>
+                <span class="node-icon">${icon}</span>
+                <span class="tree-node-name">${item.name}</span>
+              </div>
+            `;
+
+            const childContainer = document.createElement('div');
+            childContainer.className = 'tree-children';
+
+            node.addEventListener('click', () => {
+              const chevron = node.querySelector('.tree-chevron');
+              this.toggleFolder(fullPath, node, chevron, childContainer, level);
+            });
+
+            node.addEventListener('contextmenu', e => {
+              e.preventDefault();
+              e.stopPropagation();
+              const chevron = node.querySelector('.tree-chevron');
+              this.showTreeContextMenu(e.clientX, e.clientY, fullPath, true, item.name, node, chevron, childContainer, level);
+            });
+
+            parentContainer.appendChild(node);
+            parentContainer.appendChild(childContainer);
+          } else {
+            node.innerHTML = `
+              <div class="tree-node-left" title="${fullPath}">
+                <span class="tree-chevron-spacer"></span>
+                <span class="node-icon">${icon}</span>
+                <span class="tree-node-name">${item.name}</span>
+              </div>
+              ${sizeStr ? `<span class="tree-node-size">${sizeStr}</span>` : ''}
+            `;
+
+            node.addEventListener('click', () => {
+              // Highlight active tree node
+              document.querySelectorAll('.tree-node').forEach(el => el.classList.remove('active'));
+              node.classList.add('active');
+              this.openFile(fullPath);
+            });
+
+            node.addEventListener('dblclick', e => {
+              e.stopPropagation();
+              this.openFile(fullPath, 0, true);
+            });
+
+            node.addEventListener('contextmenu', e => {
+              e.preventDefault();
+              e.stopPropagation();
+              this.showTreeContextMenu(e.clientX, e.clientY, fullPath, false, item.name, node);
+            });
+
+            parentContainer.appendChild(node);
+          }
+        },
+
+        async toggleFolder(folderPath, folderNode, chevron, childContainer, level) {
+          const isExpanded = childContainer.style.display === 'block';
+          if (isExpanded) {
+            chevron.textContent = '▶';
+            childContainer.style.display = 'none';
+            return;
+          }
+
+          chevron.textContent = '▼';
+          childContainer.style.display = 'block';
+
+          if (childContainer.dataset.loaded === 'true') {
+            return;
+          }
+
+          childContainer.innerHTML = `
+            <div class="tree-node" style="padding-left: ${(level + 1) * 14 + 6}px; color: var(--text-muted);">
+              <span class="node-icon">⏳</span>
+              <span>正在展开...</span>
+            </div>
+          `;
+
+          try {
+            const resp = await this.listDir(folderPath);
+            if (!resp.success) {
+              childContainer.innerHTML = `
+                <div class="tree-node" style="padding-left: ${(level + 1) * 14 + 6}px; color: #f48771;">
+                  <span class="node-icon">⚠️</span>
+                  <span>读取失败: ${resp.error || ''}</span>
+                </div>
+              `;
+              return;
+            }
+
+            const entries = resp.entries || [];
+            entries.sort((a, b) => {
+              if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+              return a.name.localeCompare(b.name);
+            });
+
+            childContainer.innerHTML = '';
+            childContainer.dataset.loaded = 'true';
+
+            if (entries.length === 0) {
+              childContainer.innerHTML = `
+                <div class="tree-node" style="padding-left: ${(level + 1) * 14 + 6}px; color: var(--text-muted);">
+                  <span class="node-icon">📂</span>
+                  <span>空文件夹</span>
+                </div>
+              `;
+              return;
+            }
+
+            for (const item of entries) {
+              const fullPath = folderPath.endsWith('/') ? `${folderPath}${item.name}` : `${folderPath}/${item.name}`;
+              this.renderTreeNode(item, fullPath, childContainer, level + 1);
+            }
+          } catch (err) {
+            childContainer.innerHTML = `
+              <div class="tree-node" style="padding-left: ${(level + 1) * 14 + 6}px; color: #f48771;">
+                <span class="node-icon">⚠️</span>
+                <span>展开超时</span>
+              </div>
+            `;
+          }
+        },
+
+        async openFile(path, targetLine = 0, forcePin = false) {
+          if (!path) return;
+          if (!this.sftpReady) {
+            this.log('info', 'SFTP', `SFTP 尚未就绪，排队等待打开: ${path}`);
+            this.pendingOpenFile = { path, line: targetLine, forcePin };
+            return;
+          }
+          console.log('[Editor] openFile:', path, 'line:', targetLine, 'forcePin:', forcePin);
+
+          if (this.tabs.has(path)) {
+            if (forcePin) {
+              this.togglePinTab(path, true);
+            }
+            this.switchTab(path, targetLine);
+            return;
+          }
+
+          // VS Code preview tab logic: if active tab is unpinned and not dirty, and not forcePin, replace it!
+          let reuseTabPath = null;
+          if (!forcePin && this.activePath && this.tabs.has(this.activePath)) {
+            const activeTab = this.tabs.get(this.activePath);
+            if (!activeTab.isPinned && !activeTab.isDirty) {
+              reuseTabPath = this.activePath;
+            }
+          }
+
+          this.showToast('正在读取 ' + (path.split('/').pop() || path));
+          try {
+            const resp = await this.readFile(path);
+            if (!resp.success) {
+              this.showToast('读取文件失败: ' + (resp.error || '未知错误'));
+              return;
+            }
+
+            const name = path.split('/').pop() || path;
+            const isImg = /\.(png|jpg|jpeg|gif|webp|svg|ico)$/i.test(path);
+            let model = null;
+
+            if (!isImg && this.monacoReady && typeof monaco !== 'undefined') {
+              const lang = this.getLanguageId(path);
+              model = monaco.editor.createModel(resp.content || '', lang, monaco.Uri.file(path));
+              model.onDidChangeContent(() => {
+                const current = model.getValue();
+                const tabData = this.tabs.get(path);
+                if (tabData) {
+                  tabData.isDirty = (current !== tabData.originalContent);
+                  const tabBar = document.getElementById('tab-bar');
+                  const tabEl = Array.from(tabBar.children).find(el => el.dataset.path === path);
+                  if (tabEl) {
+                    tabEl.classList.toggle('dirty', tabData.isDirty);
+                    if (tabData.isDirty) {
+                      this.togglePinTab(path, true);
+                    }
+                  }
+                }
+              });
+            }
+
+            const isMdFile = /\.(md|markdown|mdown|mkd)$/i.test(path);
+            const tabData = {
+              path,
+              name,
+              model,
+              content: resp.content || '',
+              originalContent: resp.content || '',
+              isDirty: false,
+              isPinned: !!forcePin, // Pinned if forced or edited
+              isBinary: !!resp.isBinary,
+              size: resp.size || 0,
+              viewState: null,
+              isPreviewingMd: isMdFile  // Default to preview for .md files
+            };
+
+            // If reusing unpinned preview tab, close old one first
+            if (reuseTabPath) {
+              this.closeTab(reuseTabPath, true);
+            }
+
+            this.tabs.set(path, tabData);
+            this.createTabElement(tabData);
+            this.switchTab(path, targetLine);
+          } catch (err) {
+            this.showToast('读取超时: ' + err.message);
+          }
+        },
+
+        togglePinTab(path, forceState) {
+          const tabData = this.tabs.get(path);
+          if (!tabData) return;
+          const nextPinned = (forceState !== undefined) ? !!forceState : !tabData.isPinned;
+          tabData.isPinned = nextPinned;
+
+          const tabBar = document.getElementById('tab-bar');
+          const tabEl = Array.from(tabBar.children).find(el => el.dataset.path === path);
+          if (tabEl) {
+            tabEl.classList.toggle('pinned', tabData.isPinned);
+            tabEl.classList.toggle('preview', !tabData.isPinned);
+            const pinBtn = tabEl.querySelector('.tab-pin-btn');
+            if (pinBtn) {
+              pinBtn.title = tabData.isPinned ? "取消固定标签页 (Unpin)" : "固定此标签页 (Pin)";
+            }
+          }
+          this.showToast(tabData.isPinned ? `📌 已固定标签页: ${tabData.name}` : `已取消固定: ${tabData.name}`);
+        },
+
+        createTabElement(tabData) {
+          const tabBar = document.getElementById('tab-bar');
+          const tab = document.createElement('div');
+          tab.className = 'tab-item ' + (tabData.isPinned ? 'pinned' : 'preview');
+          tab.dataset.path = tabData.path;
+          tab.title = tabData.path;
+          tab.innerHTML = `
+            <span class="tab-pin-btn" title="${tabData.isPinned ? '取消固定标签页 (Unpin)' : '固定此标签页 (Pin)'}">📌</span>
+            <span class="tab-title">${tabData.name}</span>
+            <span class="tab-dirty-indicator"></span>
+            <span class="tab-close-btn" title="关闭">✕</span>
+          `;
+
+          tab.addEventListener('click', e => {
+            if (e.target.classList.contains('tab-close-btn')) {
+              e.stopPropagation();
+              this.closeTab(tabData.path);
+              return;
+            }
+            if (e.target.classList.contains('tab-pin-btn')) {
+              e.stopPropagation();
+              this.togglePinTab(tabData.path);
+              return;
+            }
+            this.switchTab(tabData.path);
+          });
+
+          // Middle click to close
+          tab.addEventListener('auxclick', e => {
+            if (e.button === 1) this.closeTab(tabData.path);
+          });
+
+          // Double click on tab to pin/unpin
+          tab.addEventListener('dblclick', e => {
+            if (e.target.classList.contains('tab-close-btn')) return;
+            this.togglePinTab(tabData.path);
+          });
+
+          // Right click for context menu
+          tab.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            this.showTabContextMenu(e.clientX, e.clientY, tabData.path);
+          });
+
+          tabBar.appendChild(tab);
+        },
+
+        showTabContextMenu(x, y, path) {
+          const menu = document.getElementById('tab-context-menu');
+          if (!menu) return;
+          this.hideTreeContextMenu();
+          this.contextMenuPath = path;
+
+          const tabData = this.tabs.get(path);
+          const pinItem = document.getElementById('ctx-tab-pin');
+          if (pinItem && tabData) {
+            pinItem.textContent = tabData.isPinned ? '📌 取消固定标签页' : '📌 固定标签页';
+          }
+
+          menu.style.left = `${Math.min(x, window.innerWidth - 170)}px`;
+          menu.style.top = `${Math.min(y, window.innerHeight - 170)}px`;
+          menu.style.left = `${Math.min(x, window.innerWidth - 180)}px`;
+          menu.style.top = `${Math.min(y, window.innerHeight - 200)}px`;
+          menu.classList.remove('hidden');
+        },
+
+        hideTabContextMenu() {
+          const menu = document.getElementById('tab-context-menu');
+          if (menu) menu.classList.add('hidden');
+          this.contextMenuPath = null;
+        },
+
+        showTreeContextMenu(x, y, path, isDir, name, node, chevron, childContainer, level) {
+          const menu = document.getElementById('tree-context-menu');
+          if (!menu) return;
+          this.hideTabContextMenu();
+          this.treeMenuData = { path, isDir, name, node, chevron, childContainer, level };
+
+          const openItem = document.getElementById('ctx-tree-open');
+          const refreshItem = document.getElementById('ctx-tree-refresh');
+          const downloadItem = document.getElementById('ctx-tree-download');
+
+          if (isDir) {
+            if (openItem) openItem.style.display = 'none';
+            if (refreshItem) refreshItem.style.display = 'flex';
+            if (downloadItem) downloadItem.textContent = '📥 下载文件夹到本地...';
+          } else {
+            if (openItem) openItem.style.display = 'flex';
+            if (refreshItem) refreshItem.style.display = 'none';
+            if (downloadItem) downloadItem.textContent = '📥 下载文件到本地...';
+          }
+
+          menu.style.left = `${Math.min(x, window.innerWidth - 180)}px`;
+          menu.style.top = `${Math.min(y, window.innerHeight - 180)}px`;
+          menu.classList.remove('hidden');
+        },
+
+        hideTreeContextMenu() {
+          const menu = document.getElementById('tree-context-menu');
+          if (menu) menu.classList.add('hidden');
+          this.treeMenuData = null;
+        },
+
+        refreshFolder(folderPath, folderNode, chevron, childContainer, level) {
+          if (childContainer && chevron && folderNode) {
+            childContainer.dataset.loaded = 'false';
+            childContainer.style.display = 'none';
+            this.toggleFolder(folderPath, folderNode, chevron, childContainer, level);
+          } else {
+            this.loadDirectory(this.currentDir);
+          }
+        },
+
+        downloadPath(remotePath, isDirectory, defaultName) {
+          if (!remotePath) return;
+          if (!defaultName) {
+            const clean = remotePath.replace(/[\/\\]+$/, '');
+            const idx = Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\'));
+            defaultName = idx >= 0 ? clean.substring(idx + 1) : (clean || (isDirectory ? 'folder' : 'file'));
+          }
+          this.send({
+            cmd: 'sftp_download_prompt',
+            remotePath: remotePath,
+            isDirectory: !!isDirectory,
+            defaultName: defaultName
+          });
+        },
+
+        closeOtherTabs(keepPath) {
+          for (const path of Array.from(this.tabs.keys())) {
+            if (path !== keepPath) {
+              this.closeTab(path);
+            }
+          }
+        },
+
+        toggleMarkdownPreview() {
+          if (!this.activePath) return;
+          const tabData = this.tabs.get(this.activePath);
+          if (!tabData) return;
+          const isMd = /\.(md|markdown|mdown|mkd)$/i.test(this.activePath);
+          if (!isMd) return;
+
+          tabData.isPreviewingMd = !tabData.isPreviewingMd;
+          this.switchTab(this.activePath);
+        },
+
+        async renderMarkdown(tabData) {
+          if (!tabData) return;
+          const mdContainer = document.getElementById('markdown-body');
+          const mdTitle = document.getElementById('md-preview-title');
+          if (mdTitle) mdTitle.textContent = `${tabData.name} (预览)`;
+          if (!mdContainer) return;
+
+          // Get latest content
+          let rawText = '';
+          if (this.monacoReady && tabData.model) {
+            rawText = tabData.model.getValue();
+          } else {
+            rawText = tabData.content || '';
+          }
+
+          // 1. Protect and extract LaTeX math blocks so Marked doesn't mangle them
+          const mathBlocks = [];
+          // Block Math: $$ ... $$
+          let processed = rawText.replace(/\$\$([\s\S]+?)\$\$/g, (match, formula) => {
+            const id = `%%MATH_BLOCK_${mathBlocks.length}%%`;
+            mathBlocks.push({ id, formula: formula.trim(), display: true });
+            return `\n\n${id}\n\n`;
+          });
+          // Inline Math: $ ... $
+          processed = processed.replace(/(^|[^\$])\$([^\$\n]+?)\$(?!\$)/g, (match, prefix, formula) => {
+            const id = `%%MATH_INLINE_${mathBlocks.length}%%`;
+            mathBlocks.push({ id, formula: formula.trim(), display: false });
+            return `${prefix}${id}`;
+          });
+
+          // 2. Parse Markdown with marked
+          let html = '';
+          if (window.marked) {
+            try {
+              marked.setOptions({
+                gfm: true,
+                breaks: true
+              });
+              html = marked.parse(processed);
+            } catch (err) {
+              html = `<div style="color:#e06c75;padding:12px;">Markdown 解析错误: ${err.message}</div><pre>${processed.replace(/</g, '&lt;')}</pre>`;
+            }
+          } else {
+            html = `<pre>${processed.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+          }
+
+          // 3. Render and restore KaTeX formulas
+          for (const item of mathBlocks) {
+            let renderedMath = '';
+            if (window.katex) {
+              try {
+                renderedMath = katex.renderToString(item.formula, {
+                  displayMode: item.display,
+                  throwOnError: false
+                });
+              } catch (err) {
+                renderedMath = `<span class="katex-error" title="${err.message}">${item.formula}</span>`;
+              }
+            } else {
+              renderedMath = item.display ? `$$${item.formula}$$` : `$${item.formula}$`;
+            }
+
+            if (item.display) {
+              const pRegex = new RegExp(`<p>\\s*${item.id}\\s*<\\/p>|${item.id}`, 'g');
+              html = html.replace(pRegex, `<div class="katex-display">${renderedMath}</div>`);
+            } else {
+              html = html.split(item.id).join(renderedMath);
+            }
+          }
+
+          mdContainer.innerHTML = html;
+
+          // 4. Render Mermaid diagrams
+          const mermaidCodes = mdContainer.querySelectorAll('pre code.language-mermaid, pre code.lang-mermaid');
+          if (mermaidCodes.length > 0 && window.mermaid) {
+            const nodes = [];
+            mermaidCodes.forEach((codeEl, idx) => {
+              const pre = codeEl.closest('pre');
+              const graphCode = codeEl.textContent.trim();
+              const div = document.createElement('div');
+              div.className = 'mermaid';
+              div.id = 'mermaid-chart-' + Date.now() + '-' + idx;
+              div.textContent = graphCode;
+              pre.replaceWith(div);
+              nodes.push(div);
+            });
+
+            try {
+              await mermaid.run({ nodes });
+            } catch (err) {
+              console.warn('Mermaid render warning:', err);
+            }
+          }
+        },
+
+        switchTab(path, targetLine = 0) {
+          const tabData = this.tabs.get(path);
+          if (!tabData) return;
+
+          // Save view state of previous tab
+          if (this.activePath && this.tabs.has(this.activePath)) {
+            const prevTab = this.tabs.get(this.activePath);
+            if (prevTab && this.editor && prevTab.model) {
+              prevTab.viewState = this.editor.saveViewState();
+            }
+          }
+
+          this.activePath = path;
+
+          const tabBar = document.getElementById('tab-bar');
+          Array.from(tabBar.children).forEach(el => {
+            el.classList.toggle('active', el.dataset.path === path);
+          });
+
+          document.getElementById('empty-state').style.display = 'none';
+
+          const monacoContainer = document.getElementById('monaco-container');
+          const fallbackWrapper = document.getElementById('fallback-wrapper');
+          const imageWrapper = document.getElementById('image-wrapper');
+          const markdownWrapper = document.getElementById('markdown-wrapper');
+
+          const isMd = /\.(md|markdown|mdown|mkd)$/i.test(path);
+          const btnMdPreview = document.getElementById('btn-md-preview');
+          if (btnMdPreview) {
+            btnMdPreview.style.display = isMd ? 'inline-flex' : 'none';
+            // When previewing: button becomes "Edit source" (amber/active);
+            // When editing: button becomes "Preview" (green)
+            btnMdPreview.textContent = tabData.isPreviewingMd ? '✏️ 编辑源码' : '👁️ 预览';
+            btnMdPreview.title = tabData.isPreviewingMd
+              ? '返回 Markdown 源码编辑 (Ctrl+Shift+V)'
+              : '切换 Markdown 富文本预览 (Ctrl+Shift+V)';
+            btnMdPreview.classList.toggle('active', !!tabData.isPreviewingMd);
+          }
+
+          const isImg = /\.(png|jpg|jpeg|gif|webp|svg|ico)$/i.test(path);
+          if (isImg && (tabData.isBinary || path.endsWith('.svg'))) {
+            monacoContainer.style.display = 'none';
+            fallbackWrapper.style.display = 'none';
+            markdownWrapper.style.display = 'none';
+            imageWrapper.style.display = 'flex';
+            const img = document.getElementById('image-element');
+            const mime = path.endsWith('.png') ? 'image/png' :
+                         (path.endsWith('.jpg') || path.endsWith('.jpeg')) ? 'image/jpeg' :
+                         path.endsWith('.gif') ? 'image/gif' :
+                         path.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+            if (path.endsWith('.svg') && !tabData.isBinary) {
+              img.src = `data:image/svg+xml;utf8,${encodeURIComponent(tabData.content)}`;
+            } else {
+              img.src = `data:${mime};base64,${tabData.content}`;
+            }
+            imageViewer.reset();
+            img.onload = () => {
+              imageViewer.updateInfo(img.naturalWidth, img.naturalHeight, this.formatSize(tabData.size));
+            };
+            document.getElementById('status-lang').textContent = 'Image';
+          } else if (isMd && tabData.isPreviewingMd) {
+            monacoContainer.style.display = 'none';
+            fallbackWrapper.style.display = 'none';
+            imageWrapper.style.display = 'none';
+            markdownWrapper.style.display = 'flex';
+            this.renderMarkdown(tabData);
+            document.getElementById('status-lang').textContent = 'Markdown Preview';
+          } else if (this.monacoReady && this.editor && tabData.model) {
+            imageWrapper.style.display = 'none';
+            fallbackWrapper.style.display = 'none';
+            markdownWrapper.style.display = 'none';
+            monacoContainer.style.display = 'block';
+
+            this.editor.setModel(tabData.model);
+            if (tabData.viewState && targetLine <= 0) {
+              this.editor.restoreViewState(tabData.viewState);
+            }
+            if (targetLine > 0) {
+              this.jumpToLine(targetLine);
+            }
+            this.editor.layout();
+            this.editor.focus();
+            document.getElementById('status-lang').textContent = this.getLanguageName(path);
+          } else {
+            // Fallback textarea mode
+            monacoContainer.style.display = 'none';
+            imageWrapper.style.display = 'none';
+            markdownWrapper.style.display = 'none';
+            fallbackWrapper.style.display = 'flex';
+
+            const textarea = document.getElementById('fallback-textarea');
+            textarea.value = tabData.content;
+            this.updateFallbackLineNumbers();
+            if (targetLine > 0) {
+              this.jumpToLineFallback(targetLine);
+            }
+            document.getElementById('status-lang').textContent = this.getLanguageName(path);
+          }
+
+          document.getElementById('status-path').textContent = path;
+
+          // Auto-locate & highlight the active file in the sidebar tree
+          this.highlightActiveFileInTree(path);
+        },
+
+        /* ── Sidebar collapse / expand ─────────────────────────────── */
+        toggleSidebar() {
+          const sidebar  = document.getElementById('sidebar');
+          const resizer  = document.getElementById('sidebar-resizer');
+          const btn      = document.getElementById('btn-sidebar-toggle');
+          const collapsed = sidebar.classList.toggle('collapsed');
+          resizer.classList.toggle('collapsed', collapsed);
+          btn.textContent = collapsed ? '▶' : '◀';
+          btn.title       = collapsed ? '展开侧边栏 (Ctrl+B)' : '隐藏侧边栏 (Ctrl+B)';
+          // Monaco needs a layout refresh when the container size changes
+          if (this.editor) {
+            setTimeout(() => this.editor.layout(), 200);
+          }
+        },
+
+        /* ── Auto-locate current file in sidebar tree ───────────────── */
+        highlightActiveFileInTree(path) {
+          if (!path) return;
+          const fileDir  = path.substring(0, path.lastIndexOf('/')) || '/';
+          const fileName = path.substring(path.lastIndexOf('/') + 1);
+
+          // helper: find and highlight a tree-node whose title == path
+          const tryHighlight = () => {
+            // Clear previous highlight
+            document.querySelectorAll('.tree-node.tree-active-file')
+              .forEach(el => el.classList.remove('tree-active-file'));
+
+            // Look for a file node whose full-path title matches
+            const allNodes = document.querySelectorAll('#file-tree-container .tree-node');
+            let found = null;
+            for (const node of allNodes) {
+              const titleEl = node.querySelector('[title]');
+              const title   = titleEl ? titleEl.getAttribute('title') : '';
+              if (title === path) { found = node; break; }
+            }
+            if (found) {
+              found.classList.add('tree-active-file');
+              found.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              return true;
+            }
+            return false;
+          };
+
+          // If the sidebar already shows the directory containing this file,
+          // just try to highlight directly.
+          if (this.currentDir === fileDir) {
+            tryHighlight();
+            return;
+          }
+
+          // Otherwise navigate to the file's parent directory first, then highlight
+          this.loadDirectory(fileDir).then(() => {
+            // Give the DOM a tick to render
+            setTimeout(() => tryHighlight(), 80);
+          }).catch(() => {});
+        },
+
+        closeTab(path, silent = false) {
+          const tabData = this.tabs.get(path);
+          if (!tabData) return;
+
+          if (!silent && tabData.isDirty) {
+            if (!confirm(`文件 "${tabData.name}" 已修改但尚未保存，确定要关闭吗？`)) {
+              return;
+            }
+          }
+
+          if (tabData.model) {
+            tabData.model.dispose();
+          }
+
+          this.tabs.delete(path);
+          const tabBar = document.getElementById('tab-bar');
+          const tabEl = Array.from(tabBar.children).find(el => el.dataset.path === path);
+          if (tabEl) tabEl.remove();
+
+          if (this.activePath === path) {
+            const remaining = Array.from(this.tabs.keys());
+            if (remaining.length > 0) {
+              this.switchTab(remaining[remaining.length - 1]);
+            } else {
+              this.activePath = null;
+              document.getElementById('monaco-container').style.display = 'none';
+              document.getElementById('fallback-wrapper').style.display = 'none';
+              document.getElementById('image-wrapper').style.display = 'none';
+              document.getElementById('markdown-wrapper').style.display = 'none';
+              const btnMd = document.getElementById('btn-md-preview');
+              if (btnMd) btnMd.style.display = 'none';
+              document.getElementById('empty-state').style.display = 'flex';
+              document.getElementById('status-path').textContent = '/';
+              document.getElementById('status-lang').textContent = 'Plain Text';
+            }
+          }
+        },
+
+        async saveActiveFile() {
+          if (!this.activePath) return;
+          const tabData = this.tabs.get(this.activePath);
+          if (!tabData) return;
+
+          let content = '';
+          if (this.monacoReady && tabData.model) {
+            content = tabData.model.getValue();
+          } else {
+            content = document.getElementById('fallback-textarea').value;
+          }
+
+          this.showToast('正在保存...');
+          try {
+            const resp = await this.writeFile(tabData.path, content, false);
+            if (resp.success) {
+              tabData.originalContent = content;
+              tabData.content = content;
+              tabData.isDirty = false;
+
+              const tabBar = document.getElementById('tab-bar');
+              const tabEl = Array.from(tabBar.children).find(el => el.dataset.path === tabData.path);
+              if (tabEl) tabEl.classList.remove('dirty');
+
+              this.showToast('已保存: ' + tabData.name);
+            } else {
+              this.showToast('保存失败: ' + (resp.error || '未知错误'));
+            }
+          } catch (err) {
+            this.showToast('保存超时: ' + err.message);
+          }
+        },
+
+        jumpToLine(line) {
+          if (this.editor && line > 0) {
+            this.editor.revealLineInCenter(line);
+            this.editor.setPosition({ lineNumber: line, column: 1 });
+            this.editor.focus();
+            document.getElementById('status-pos').textContent = `Ln ${line}, Col 1`;
+          }
+        },
+
+        jumpToLineFallback(line) {
+          if (line <= 0) return;
+          const textarea = document.getElementById('fallback-textarea');
+          const lines = textarea.value.split('\n');
+          let pos = 0;
+          for (let i = 0; i < line - 1 && i < lines.length; i++) {
+            pos += lines[i].length + 1;
+          }
+          textarea.setSelectionRange(pos, pos);
+          textarea.focus();
+          textarea.scrollTop = Math.max(0, (line - 5) * 20.25);
+        },
+
+        updateFallbackLineNumbers() {
+          const textarea = document.getElementById('fallback-textarea');
+          const lineNums = document.getElementById('fallback-line-numbers');
+          const lines = textarea.value.split('\n').length;
+          let html = '';
+          for (let i = 1; i <= lines; i++) {
+            html += i + '<br>';
+          }
+          lineNums.innerHTML = html;
+        },
+
+        showToast(msg) {
+          const toast = document.getElementById('toast');
+          toast.textContent = msg;
+          toast.classList.add('show');
+          clearTimeout(this.toastTimer);
+          this.toastTimer = setTimeout(() => {
+            toast.classList.remove('show');
+          }, 2500);
+        },
+
+        getLanguageId(path) {
+          const ext = (path.split('.').pop() || '').toLowerCase();
+          const map = {
+            'c': 'c', 'h': 'c',
+            'cpp': 'cpp', 'hpp': 'cpp', 'cc': 'cpp', 'cxx': 'cpp',
+            'py': 'python', 'pyw': 'python',
+            'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
+            'ts': 'typescript', 'tsx': 'typescript',
+            'java': 'java',
+            'go': 'go',
+            'rs': 'rust',
+            'sh': 'shell', 'bash': 'shell', 'zsh': 'shell',
+            'json': 'json',
+            'md': 'markdown', 'markdown': 'markdown',
+            'html': 'html', 'htm': 'html',
+            'css': 'css', 'scss': 'scss', 'less': 'less',
+            'xml': 'xml', 'svg': 'xml',
+            'yaml': 'yaml', 'yml': 'yaml',
+            'sql': 'sql',
+            'php': 'php',
+            'rb': 'ruby',
+            'lua': 'lua',
+            'ini': 'ini', 'conf': 'ini'
+          };
+          return map[ext] || 'plaintext';
+        },
+
+        getLanguageName(path) {
+          const langId = this.getLanguageId(path);
+          const names = {
+            'c': 'C', 'cpp': 'C++', 'python': 'Python', 'javascript': 'JavaScript',
+            'typescript': 'TypeScript', 'java': 'Java', 'go': 'Go', 'rust': 'Rust',
+            'shell': 'Shell Script', 'json': 'JSON', 'markdown': 'Markdown',
+            'html': 'HTML', 'css': 'CSS', 'xml': 'XML', 'yaml': 'YAML',
+            'sql': 'SQL', 'php': 'PHP', 'plaintext': 'Plain Text'
+          };
+          return names[langId] || 'Plain Text';
+        },
+
+        getFileIcon(name, isDir) {
+          if (isDir) return '📁';
+          if (/\.(png|jpg|jpeg|gif|webp|svg|ico)$/i.test(name)) return '🖼️';
+          if (/\.(c|h|cpp|hpp)$/i.test(name)) return '🇨';
+          if (/\.(js|mjs|cjs)$/i.test(name)) return '🟨';
+          if (/\.(ts|tsx)$/i.test(name)) return '🔷';
+          if (/\.(py|pyw)$/i.test(name)) return '🐍';
+          if (/\.(html|htm)$/i.test(name)) return '🌐';
+          if (/\.(css|scss|less)$/i.test(name)) return '🎨';
+          if (/\.(json|yaml|yml|xml|toml)$/i.test(name)) return '⚙️';
+          if (/\.(sh|bash|zsh)$/i.test(name)) return '💻';
+          if (/\.(md|markdown|txt)$/i.test(name)) return '📝';
+          return '📄';
+        },
+
+        formatSize(bytes) {
+          if (!bytes || bytes <= 0) return '0 B';
+          if (bytes < 1024) return bytes + ' B';
+          if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+          return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+      };
+
+      // 3. UI Bindings
+      document.getElementById('btn-close').addEventListener('click', () => {
+        bridge.send({ cmd: 'close' });
+      });
+
+      document.getElementById('btn-refresh').addEventListener('click', () => {
+        bridge.loadDirectory(bridge.currentDir);
+      });
+
+      document.getElementById('btn-logs')?.addEventListener('click', () => {
+        bridge.toggleLogModal();
+      });
+
+      document.getElementById('status-log-btn')?.addEventListener('click', () => {
+        bridge.toggleLogModal();
+      });
+
+      document.getElementById('btn-log-close')?.addEventListener('click', () => {
+        bridge.toggleLogModal(false);
+      });
+
+      document.getElementById('btn-log-clear')?.addEventListener('click', () => {
+        bridge.clearLogs();
+      });
+
+      document.getElementById('btn-log-copy')?.addEventListener('click', () => {
+        bridge.copyLogs();
+      });
+
+      document.getElementById('btn-log-fetch-host')?.addEventListener('click', () => {
+        bridge.fetchHostLogs();
+      });
+
+      document.getElementById('btn-tree-refresh').addEventListener('click', () => {
+        bridge.loadDirectory(bridge.currentDir);
+      });
+
+      document.getElementById('btn-tree-up').addEventListener('click', () => {
+        if (bridge.currentDir !== '/' && bridge.currentDir !== '') {
+          const parent = bridge.currentDir.replace(/\/[^/]+\/?$/, '') || '/';
+          bridge.loadDirectory(parent);
+        }
+      });
+
+      document.getElementById('btn-tree-new').addEventListener('click', async () => {
+        const name = prompt('输入新文件名：', 'new_file.txt');
+        if (!name || !name.trim()) return;
+        const targetPath = bridge.currentDir.endsWith('/') ?
+          `${bridge.currentDir}${name.trim()}` : `${bridge.currentDir}/${name.trim()}`;
+        try {
+          const resp = await bridge.writeFile(targetPath, '', false);
+          if (resp.success) {
+            await bridge.loadDirectory(bridge.currentDir);
+            bridge.openFile(targetPath);
+          } else {
+            alert('创建文件失败: ' + (resp.error || '未知错误'));
+          }
+        } catch (e) {
+          alert('操作超时: ' + e.message);
+        }
+      });
+
+      document.getElementById('sidebar-path-input').addEventListener('keydown', async e => {
+        if (e.key === 'Enter') {
+          const p = e.target.value.trim();
+          if (p) {
+            const res = await bridge.openRemotePath(p);
+            if (!res.success) {
+              bridge.showToast(`打开失败: ${res.error}`);
+            }
+          }
+        }
+      });
+
+      // Open Path Modal UI Listeners
+      document.getElementById('btn-open-path')?.addEventListener('click', () => {
+        bridge.showOpenPathModal();
+      });
+
+      document.getElementById('btn-tree-open')?.addEventListener('click', () => {
+        bridge.showOpenPathModal();
+      });
+
+      document.getElementById('btn-modal-close')?.addEventListener('click', () => {
+        bridge.hideOpenPathModal();
+      });
+
+      document.getElementById('btn-open-path-cancel')?.addEventListener('click', () => {
+        bridge.hideOpenPathModal();
+      });
+
+      document.getElementById('btn-open-path-confirm')?.addEventListener('click', () => {
+        bridge.handleOpenPathConfirm();
+      });
+
+      document.getElementById('input-open-path')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          bridge.handleOpenPathConfirm();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          bridge.hideOpenPathModal();
+        }
+      });
+
+      document.querySelectorAll('.quick-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          const p = chip.dataset.path;
+          const input = document.getElementById('input-open-path');
+          if (input && p) {
+            input.value = p;
+            input.focus();
+            input.select();
+          }
+        });
+      });
+
+      document.getElementById('open-path-modal')?.addEventListener('click', e => {
+        if (e.target.id === 'open-path-modal') {
+          bridge.hideOpenPathModal();
+        }
+      });
+
+      document.getElementById('btn-save').addEventListener('click', () => {
+        bridge.saveActiveFile();
+      });
+
+      document.getElementById('btn-md-preview')?.addEventListener('click', () => {
+        bridge.toggleMarkdownPreview();
+      });
+
+      document.getElementById('btn-md-edit-back')?.addEventListener('click', () => {
+        bridge.toggleMarkdownPreview();
+      });
+
+      document.getElementById('btn-md-refresh')?.addEventListener('click', () => {
+        if (bridge.activePath) {
+          const tabData = bridge.tabs.get(bridge.activePath);
+          if (tabData) bridge.renderMarkdown(tabData);
+        }
+      });
+
+      document.getElementById('btn-sidebar-toggle')?.addEventListener('click', () => {
+        bridge.toggleSidebar();
+      });
+
+      window.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+          e.preventDefault();
+          bridge.saveActiveFile();
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+          e.preventDefault();
+          bridge.showOpenPathModal();
+        } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
+          e.preventDefault();
+          bridge.toggleMarkdownPreview();
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+          e.preventDefault();
+          bridge.toggleSidebar();
+        } else if (e.key === 'Escape') {
+          const modal = document.getElementById('open-path-modal');
+          if (modal && !modal.classList.contains('hidden')) {
+            e.preventDefault();
+            bridge.hideOpenPathModal();
+          }
+        }
+      });
+
+      // Fallback textarea listeners
+      const fallbackTextarea = document.getElementById('fallback-textarea');
+      fallbackTextarea.addEventListener('input', () => {
+        bridge.updateFallbackLineNumbers();
+        if (bridge.activePath) {
+          const tabData = bridge.tabs.get(bridge.activePath);
+          if (tabData) {
+            tabData.content = fallbackTextarea.value;
+            tabData.isDirty = (tabData.content !== tabData.originalContent);
+            const tabBar = document.getElementById('tab-bar');
+            const tabEl = Array.from(tabBar.children).find(el => el.dataset.path === tabData.path);
+            if (tabEl) tabEl.classList.toggle('dirty', tabData.isDirty);
+          }
+        }
+      });
+
+      // Resizer Drag Logic
+      const resizer = document.getElementById('sidebar-resizer');
+      const sidebar = document.getElementById('sidebar');
+      let isResizing = false;
+
+      resizer.addEventListener('mousedown', () => {
+        isResizing = true;
+        resizer.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+      });
+
+      window.addEventListener('mousemove', e => {
+        if (!isResizing) return;
+        const newWidth = Math.max(160, Math.min(600, e.clientX));
+        sidebar.style.width = newWidth + 'px';
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isResizing) {
+          isResizing = false;
+          resizer.classList.remove('resizing');
+          document.body.style.cursor = 'default';
+        }
+      });
+
+      // Tree Context Menu Actions
+      document.getElementById('ctx-tree-open')?.addEventListener('click', () => {
+        if (bridge.treeMenuData && !bridge.treeMenuData.isDir) {
+          bridge.openFile(bridge.treeMenuData.path);
+        }
+        bridge.hideTreeContextMenu();
+      });
+      document.getElementById('ctx-tree-refresh')?.addEventListener('click', () => {
+        if (bridge.treeMenuData) {
+          const { path, node, chevron, childContainer, level } = bridge.treeMenuData;
+          bridge.refreshFolder(path, node, chevron, childContainer, level);
+        }
+        bridge.hideTreeContextMenu();
+      });
+      document.getElementById('ctx-tree-download')?.addEventListener('click', () => {
+        if (bridge.treeMenuData) {
+          const { path, isDir, name } = bridge.treeMenuData;
+          bridge.downloadPath(path, isDir, name);
+        }
+        bridge.hideTreeContextMenu();
+      });
+      document.getElementById('ctx-tree-copy-path')?.addEventListener('click', () => {
+        if (bridge.treeMenuData) {
+          navigator.clipboard.writeText(bridge.treeMenuData.path);
+          bridge.showToast('已复制远程路径: ' + bridge.treeMenuData.path);
+        }
+        bridge.hideTreeContextMenu();
+      });
+
+      // Tab Context Menu Actions
+      document.getElementById('ctx-tab-download')?.addEventListener('click', () => {
+        if (bridge.contextMenuPath) {
+          const tabData = bridge.tabs.get(bridge.contextMenuPath);
+          const name = tabData ? tabData.name : null;
+          bridge.downloadPath(bridge.contextMenuPath, false, name);
+        }
+        bridge.hideTabContextMenu();
+      });
+      document.getElementById('ctx-tab-pin')?.addEventListener('click', () => {
+        if (bridge.contextMenuPath) bridge.togglePinTab(bridge.contextMenuPath);
+        bridge.hideTabContextMenu();
+      });
+      document.getElementById('ctx-tab-close')?.addEventListener('click', () => {
+        if (bridge.contextMenuPath) bridge.closeTab(bridge.contextMenuPath);
+        bridge.hideTabContextMenu();
+      });
+      document.getElementById('ctx-tab-close-others')?.addEventListener('click', () => {
+        if (bridge.contextMenuPath) bridge.closeOtherTabs(bridge.contextMenuPath);
+        bridge.hideTabContextMenu();
+      });
+      document.getElementById('ctx-tab-copy-path')?.addEventListener('click', () => {
+        if (bridge.contextMenuPath) {
+          navigator.clipboard.writeText(bridge.contextMenuPath);
+          bridge.showToast('已复制路径: ' + bridge.contextMenuPath);
+        }
+        bridge.hideTabContextMenu();
+      });
+
+      window.addEventListener('click', () => {
+        bridge.hideTabContextMenu();
+        bridge.hideTreeContextMenu();
+      });
+      window.addEventListener('contextmenu', e => {
+        if (!e.target.closest('.tab-item')) bridge.hideTabContextMenu();
+        if (!e.target.closest('.tree-node')) bridge.hideTreeContextMenu();
+      });
+
+      window.EditorBridge = bridge;
+
+      window.addEventListener('DOMContentLoaded', () => {
+        bridge.init();
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -445,7 +445,11 @@ enum {
     PROT_SERIAL,
     /* PROT_SUPDUP is the historical RFC 734 protocol. */
     PROT_SUPDUP,
-    PROTOCOL_LIMIT, /* upper bound on number of protocols */
+    /* PROT_CONPTY is the Windows Pseudo Console (WSL / local) protocol. */
+    PROT_CONPTY,
+    /* PROT_POWERSHELL is local Windows PowerShell via ConPTY. */
+    PROT_POWERSHELL,
+    PROTOCOL_LIMIT = 32, /* upper bound on number of protocols */
 };
 
 enum {
